@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
@@ -15,6 +16,7 @@ import java.time.LocalDateTime;
 public class Event {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(nullable = false)
@@ -43,6 +45,19 @@ public class Event {
     private String commentToAdmin;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, columnDefinition = "Varchar(20)")
+    @Column(nullable = false, length = 20)
     private EventStatus eventStatus;
+
+    // Награда
+    @Column(nullable = false)
+    private Boolean paidInCoins = false;
+
+    @Column(precision = 19, scale = 2)
+    private BigDecimal rewardCoins;
+
+    @Column
+    private Double rewardRating;
+
+    @Column(nullable = false)
+    private Boolean rewardsGranted = false;
 }

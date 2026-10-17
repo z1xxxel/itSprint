@@ -1,5 +1,6 @@
 package com.sprint.tms_backend.controller;
 
+import com.sprint.tms_backend.DTO.AssignEventRequest;
 import com.sprint.tms_backend.DTO.CreateEventRequestDTO;
 import com.sprint.tms_backend.model.Event;
 import com.sprint.tms_backend.service.EventService;
@@ -27,7 +28,10 @@ public class EventController {
                 request.nameEvent(),
                 request.description(),
                 request.eventPlace(),
-                request.commentToAdmin()
+                request.commentToAdmin(),
+                request.paidInCoins(),
+                request.rewardCoins(),
+                request.rewardRating()
         );
         return new ResponseEntity<>(createdEvent, HttpStatus.CREATED);
     }
@@ -37,8 +41,22 @@ public class EventController {
         return ResponseEntity.ok(eventService.cancelEvent(id));
     }
 
+    @PutMapping("/{id}/assign")
+    public ResponseEntity<Event> assignEvent(@PathVariable Long id,
+                                             @RequestBody AssignEventRequest request) {
+        return ResponseEntity.ok(eventService.assignEvent(id, request.actorId()));
+    }
+
+    @GetMapping
+    public ResponseEntity<List<Event>> getAllEvents(
+            @RequestParam(required = false) Long actorId) {
+        return ResponseEntity.ok(eventService.getAllEvents(actorId));
+    }
+
     @GetMapping("/organizer/{organizerId}")
-    public ResponseEntity<List<Event>> getEventsByOrganizer(@PathVariable Long organizerId) {
-        return ResponseEntity.ok(eventService.getEventsByUser(organizerId));
+    public ResponseEntity<List<Event>> getEventsByOrganizer(
+            @PathVariable Long organizerId,
+            @RequestParam(required = false) Long actorId) {
+        return ResponseEntity.ok(eventService.getEventsByUser(organizerId, actorId));
     }
 }

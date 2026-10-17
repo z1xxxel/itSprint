@@ -1,10 +1,10 @@
 package com.sprint.tms_backend.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
-import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.math.BigDecimal;
 
@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 @AllArgsConstructor
 public class User {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -28,11 +29,12 @@ public class User {
     @Column(nullable = false)
     private String password;
 
-
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, columnDefinition = "Varchar(20)")
+    @Column(nullable = false, length = 20)
     private UserRole role;
 
-    private Double rating;
-    private BigDecimal balance;
+    private Double rating = 0.0;
+
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal balance = BigDecimal.ZERO;
 }

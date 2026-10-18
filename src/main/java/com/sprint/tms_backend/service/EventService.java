@@ -2,8 +2,8 @@ package com.sprint.tms_backend.service;
 
 import com.sprint.tms_backend.model.Event;
 import com.sprint.tms_backend.model.EventStatus;
+import com.sprint.tms_backend.model.Permission;
 import com.sprint.tms_backend.model.User;
-import com.sprint.tms_backend.model.UserRole;
 import com.sprint.tms_backend.repository.EventRepository;
 import com.sprint.tms_backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -92,7 +92,7 @@ public class EventService {
     @Transactional(readOnly = true)
     public List<Event> getAllEvents(Long actorId) {
         User actor = resolveActor(actorId);
-        if (actor == null || actor.getRole() != UserRole.Admin) {
+        if (actor == null || !actor.getRole().has(Permission.EVENT_VIEW_ANY)) {
             return eventRepository.findByEventStatusNot(EventStatus.NEW);
         }
         return eventRepository.findAll();
@@ -101,10 +101,10 @@ public class EventService {
     @Transactional(readOnly = true)
     public List<Event> getEventsByUser(Long organizerId, Long actorId) {
         User actor = resolveActor(actorId);
-        boolean isAdmin = actor != null && actor.getRole() == UserRole.Admin;
+        boolean canViewAny = actor != null && actor.getRole().has(Permission.EVENT_VIEW_ANY);
         boolean isOwner = actor != null && actor.getId().equals(organizerId);
 
-        if (isAdmin || isOwner) {
+        if (canViewAny || isOwner) {
             return eventRepository.findByOrganizerId(organizerId);
         }
         return eventRepository.findByOrganizerIdAndEventStatusNot(organizerId, EventStatus.NEW);
@@ -118,8 +118,9 @@ public class EventService {
         User actor = userRepository.findById(actorId)
                 .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
 
-        if (actor.getRole() != UserRole.Admin) {
-            throw new SecurityException("Только администратор может присвоить статус ASSIGNED");
+        if (!actor.getRole().has(Permission.EVENT_APPROVE)) {
+            throw new SecurityException(
+                    "Только пользователь с правом EVENT_APPROVE может присвоить ASSIGNED");
         }
         if (event.getEventStatus() != EventStatus.NEW) {
             throw new RuntimeException(

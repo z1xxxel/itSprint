@@ -26,7 +26,9 @@ public enum UserRole {
             Permission.EVENT_EDIT_OWN,
             Permission.COIN_TRANSFER,
             Permission.COIN_GRANT_SUBORDINATE,
-            Permission.CATALOG_VIEW
+            Permission.CATALOG_VIEW,
+            Permission.CATALOG_MANAGE,
+            Permission.ORDER_MANAGE  // Управление заказами (подтверждение/отклонение)
     )),
 
     HR(EnumSet.of(
@@ -35,7 +37,8 @@ public enum UserRole {
             Permission.EVENT_VIEW_ANY,
             Permission.COIN_TRANSFER,
             Permission.USER_MANAGE,
-            Permission.CATALOG_VIEW
+            Permission.CATALOG_VIEW,
+            Permission.ORDER_MANAGE
     )),
 
     ADMIN(EnumSet.allOf(Permission.class));

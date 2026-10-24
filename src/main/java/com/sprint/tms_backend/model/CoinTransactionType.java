@@ -6,5 +6,6 @@ public enum CoinTransactionType {
     MANAGER_BONUS,     // MANAGER → подчинённому
     PURCHASE,          // сотрудник → система (списание в каталоге)
     ACHIEVEMENT,       // система → сотруднику за ачивку
-    ADMIN_ADJUSTMENT   // ADMIN → сотруднику (ручная корректировка)
+    ADMIN_ADJUSTMENT,   // ADMIN → сотруднику (ручная корректировка)
+    REFUND // Возврат монет за отклоненный заказ
 }

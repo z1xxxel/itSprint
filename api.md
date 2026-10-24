@@ -3,74 +3,66 @@
 Базовый URL: `http://localhost:8080`
 Все запросы и ответы передаются в формате `application/json`.
 
-## Содержание
-- [Общие сведения](#общие-сведения)
-- [Ролевая модель (RBAC)](#ролевая-модель-rbac)
-- [Пользователи (Users)](#пользователи-users)
-- [Переводы и Начисления (Economy)](#переводы-и-начисления-economy)
-- [События (Events)](#события-events)
-- [Участники событий (Participants)](#участники-событий-participants)
-- [Системные процессы (Фоновые задачи)](#системные-процессы-фоновые-задачи)
+> **Примечание по безопасности (MVP):** На текущем этапе идентификация пользователя (проверка прав) происходит через передачу `actorId` в query-параметрах или теле запроса. Внедрение Spring Security и JWT запланировано на следующую итерацию.
 
 ---
 
-## Общие сведения
+## Содержание
+1. [Общие сведения и Enums](#1-общие-сведения-и-enums)
+2. [Ролевая модель (RBAC)](#2-ролевая-модель-rbac)
+3. [Пользователи (Users)](#3-пользователи-users)
+4. [Экономика (Transfers & Grants)](#4-экономика-transfers--grants)
+5. [События (Events)](#5-события-events)
+6. [Участники событий (Participants)](#6-участники-событий-participants)
+7. [Магазин и Заказы (Shop)](#7-магазин-и-заказы-shop)
+8. [Фоновые процессы](#8-фоновые-процессы)
+
+---
+
+## 1. Общие сведения и Enums
 
 ### Формат даты
-Для дат используется стандарт ISO-8601 без таймзоны:
-`2026-11-01T10:00:00`
+Все даты передаются в стандарте ISO-8601 без таймзоны: `2026-11-01T10:00:00`.
 
 ### Перечисления (Enums)
-**EventStatus** (Статус события):
-- `NEW` — создано, ожидает одобрения.
-- `ASSIGNED` — одобрено, активно, можно регистрироваться.
-- `COMPLETED` — завершено (автоматически после `toTime`).
-- `CANCELLED` — отменено.
 
-**CoinTransactionType** (Тип операции с монетами):
-- `PEER_THANKS` — перевод сотрудником коллеге.
-- `EVENT_REWARD` — награда за участие в событии.
-- `MANAGER_BONUS` — премия от руководителя.
-- `PURCHASE` — списание монет (каталог).
-- `ADMIN_ADJUSTMENT` — ручная правка от админа.
-
----
-
-## Ролевая модель (RBAC)
-
-В системе используются роли, каждая из которых имеет набор прав (`Permission`).
-
-| Роль | Описание | Ключевые права |
+| Enum | Значения | Описание |
 |---|---|---|
-| `EMPLOYEE` | Обычный сотрудник | Переводы монет, создание событий, просмотр |
-| `ORGANIZER` | Организатор | Всё как `EMPLOYEE` + редактирование любых событий |
-| `MANAGER` | Руководитель | Всё как `EMPLOYEE` + начисление бонусов (`MANAGER_BONUS`) |
-| `HR` | HR / Модератор | Одобрение событий (`NEW → ASSIGNED`), просмотр скрытых `NEW` |
-| `ADMIN` | Администратор | Полный доступ ко всем функциям и ручная правка баланса |
-
-> **Важно:** В текущей MVP-версии идентификация пользователя происходит через передачу `actorId` в параметрах/теле запроса. Внедрение Spring Security/JWT запланировано на следующем этапе.
+| **EventStatus** | `NEW`, `ASSIGNED`, `COMPLETED`, `CANCELLED` | Жизненный цикл события |
+| **CoinTransactionType** | `PEER_THANKS`, `EVENT_REWARD`, `MANAGER_BONUS`, `PURCHASE`, `ADMIN_ADJUSTMENT`, `REFUND` | Тип движения монет в журнале |
+| **ProductType** | `PHYSICAL`, `PERK`, `DIGITAL` | Тип товара (физический, услуга, цифровой) |
+| **OrderStatus** | `PENDING`, `APPROVED`, `COMPLETED`, `REJECTED`, `CANCELLED` | Жизненный цикл заказа в магазине |
 
 ---
 
-## Пользователи (Users)
+## 2. Ролевая модель (RBAC)
 
-### `POST /api/users` — Создать пользователя
-Создает нового сотрудника. Пароль сохраняется в БД, но **никогда** не возвращается в ответе.
+В системе используются роли, каждая из которых имеет набор прав (`Permission`). Проверки в коде идут по правам, а не по названию роли.
 
-**Тело запроса:**
-| Поле | Тип | Обязательно | Описание |
+| Роль | Ключевые права (Permissions) |
+|---|---|
+| `EMPLOYEE` | Создание событий, переводы монет (`PEER_THANKS`), покупки в магазине |
+| `ORGANIZER` | Всё как `EMPLOYEE` + редактирование любых событий |
+| `MANAGER` | Всё как `EMPLOYEE` + начисление бонусов (`MANAGER_BONUS`), управление заказами (`ORDER_MANAGE`) |
+| `HR` | Одобрение событий (`EVENT_APPROVE`), просмотр всех `NEW`, управление заказами |
+| `ADMIN` | Полный доступ ко всем функциям, управление каталогом (`CATALOG_MANAGE`), ручная правка баланса |
+
+---
+
+## 3. Пользователи (Users)
+
+### Таблица эндпоинтов
+| Метод | Путь | Описание | Доступ |
 |---|---|---|---|
-| `name` | string | Да | Имя пользователя |
-| `email` | string | Да | Уникальный email |
-| `password` | string | Да | Пароль |
-| `role` | string | Да | `EMPLOYEE`, `ORGANIZER`, `MANAGER`, `HR`, `ADMIN` |
-| `balance` | number | Нет | Начальный баланс (по умолчанию `0.00`) |
+| `POST` | `/api/users` | Создать пользователя | Все |
+| `GET` | `/api/users` | Список всех пользователей | Все |
+| `GET` | `/api/users/{id}` | Профиль пользователя | Все |
+| `GET` | `/api/users/{id}/transactions` | История операций (пагинация) | Все |
 
-**Пример запроса:**
-```http
-POST /api/users
-Content-Type: application/json
-
+### `POST /api/users`
+Создает пользователя. Пароль сохраняется, но не возвращается в ответе.
+**Тело запроса:**
+```json
 {
   "name": "Иван Иванов",
   "email": "ivan@tms.local",
@@ -80,36 +72,10 @@ Content-Type: application/json
 }
 ```
 
-**Ответ `200 OK`:**
-```json
-{
-  "id": 1,
-  "name": "Иван Иванов",
-  "email": "ivan@tms.local",
-  "role": "EMPLOYEE",
-  "rating": 0.0,
-  "balance": 0.00
-}
-```
-
----
-
-### `GET /api/users/{id}` — Получить пользователя
-**Ответ `200 OK`:** Возвращает объект пользователя (аналогично созданию).
-
-### `GET /api/users/{id}/transactions` — История операций
-Возвращает журнал движения монет пользователя с пагинацией.
-
-**Query parameters:**
-- `page` (default `0`) — номер страницы.
-- `size` (default `20`) — размер страницы.
-
-**Пример запроса:**
-```http
-GET /api/users/1/transactions?page=0&size=10
-```
-
-**Ответ `200 OK`:**
+### `GET /api/users/{id}/transactions`
+Возвращает историю движения монет (журнал `coin_transactions`).
+**Query parameters:** `page` (default `0`), `size` (default `20`).
+**Пример ответа:**
 ```json
 {
   "content": [
@@ -119,138 +85,65 @@ GET /api/users/1/transactions?page=0&size=10
       "toUserId": 1,
       "amount": 100.00,
       "type": "EVENT_REWARD",
-      "comment": "Награда за событие #5: Java Meetup",
+      "comment": "Награда за событие #5",
       "createdAt": "2026-10-18T15:30:00"
-    },
-    {
-      "id": 41,
-      "fromUserId": 1,
-      "toUserId": 2,
-      "amount": 50.00,
-      "type": "PEER_THANKS",
-      "comment": "Спасибо за помощь с релизом!",
-      "createdAt": "2026-10-18T14:00:00"
     }
   ],
-  "totalElements": 2,
-  "totalPages": 1
+  "totalElements": 1
 }
 ```
 
 ---
 
-## Переводы и Начисления (Economy)
+## 4. Экономика (Transfers & Grants)
 
-### `POST /api/transfers` — Перевод между сотрудниками
-Перевод монет от одного пользователя другому. Работают дневные лимиты.
-
-**Тело запроса:**
-| Поле | Тип | Обязательно | Описание |
+### Таблица эндпоинтов
+| Метод | Путь | Описание | Доступ |
 |---|---|---|---|
-| `fromUserId` | long | Да | Кто переводит |
-| `toUserId` | long | Да | Кому переводят |
-| `amount` | number | Да | Сумма перевода (> 0) |
-| `comment` | string | Да | Причина перевода («Спасибо!») |
+| `POST` | `/api/transfers` | Перевод между коллегами | `EMPLOYEE`+ |
+| `POST` | `/api/transfers/grant` | Начисление бонусов (эмиссия) | `MANAGER`, `ADMIN` |
 
-**Пример запроса:**
-```http
-POST /api/transfers
-Content-Type: application/json
-
+### `POST /api/transfers`
+Перевод монет от сотрудника к сотруднику. Действуют лимиты: 50 монет одному коллеге в день, 200 монет в сумме.
+**Тело запроса:**
+```json
 {
   "fromUserId": 1,
   "toUserId": 2,
   "amount": 30.00,
-  "comment": "Спасибо за помощь!"
+  "comment": "Спасибо за помощь с релизом!"
 }
 ```
 
-**Ответ `200 OK`:**
+### `POST /api/transfers/grant`
+Начисление премий. У менеджеров есть дневные лимиты (500 одному, 2000 в сумме).
+**Тело запроса:**
 ```json
 {
-  "id": 43,
-  "fromUserId": 1,
-  "toUserId": 2,
-  "amount": 30.00,
-  "type": "PEER_THANKS",
-  "comment": "Спасибо за помощь!",
-  "createdAt": "2026-10-18T15:35:00"
+  "actorId": 5,
+  "toUserId": 1,
+  "amount": 500.00,
+  "comment": "Квартальная премия"
 }
 ```
-
-**Ошибки:**
-- `400` — недостаточно средств.
-- `400` — превышен дневной лимит (50 монет одному коллеге, 200 в сумме).
-- `400` — перевод самому себе.
 
 ---
 
-### `POST /api/transfers/grant` — Начисление бонусов (MANAGER/ADMIN)
-Прямое начисление монет (эмиссия). Только для ролей `MANAGER` и `ADMIN`.
+## 5. События (Events)
 
-**Тело запроса:**
-| Поле | Тип | Обязательно | Описание |
+### Таблица эндпоинтов
+| Метод | Путь | Описание | Доступ |
 |---|---|---|---|
-| `actorId` | long | Да | Кто начисляет (MANAGER или ADMIN) |
-| `toUserId` | long | Да | Кому начисляют |
-| `amount` | number | Да | Сумма |
-| `comment` | string | Нет | Причина (например, «Квартальная премия») |
+| `POST` | `/api/events` | Создать событие | `EMPLOYEE`+ |
+| `PUT` | `/api/events/{id}/assign` | Одобрить (NEW → ASSIGNED) | `HR`, `ADMIN` |
+| `PUT` | `/api/events/{id}/cancel` | Отменить событие | `EMPLOYEE`+ |
+| `GET` | `/api/events` | Список событий | Все (скрывает `NEW` от обычных) |
+| `GET` | `/api/events/organizer/{organizerId}`| События организатора | Все |
 
-**Пример запроса:**
-```http
-POST /api/transfers/grant
-Content-Type: application/json
-
-{
-  "actorId": 5, 
-  "toUserId": 1,
-  "amount": 500.00,
-  "comment": "Бонус за успешный релиз"
-}
-```
-
-**Ответ `200 OK`:**
+### `POST /api/events`
+Создает мероприятие. Если `paidInCoins: true`, после завершения участникам начислятся монеты и рейтинг.
+**Тело запроса:**
 ```json
-{
-  "id": 44,
-  "fromUserId": null, 
-  "toUserId": 1,
-  "amount": 500.00,
-  "type": "MANAGER_BONUS",
-  "comment": "Бонус за успешный релиз",
-  "createdAt": "2026-10-18T16:00:00"
-}
-```
-> *Примечание: Если начисляет ADMIN, тип операции будет `ADMIN_ADJUSTMENT`.*
-
-**Ошибки:**
-- `403` — у пользователя нет прав на начисление.
-- `400` — превышен лимит начислений менеджера.
-
----
-
-## События (Events)
-
-### `POST /api/events` — Создать событие
-Создает мероприятие в статусе `NEW`.
-
-**Тело запроса:**
-| Поле | Тип | Обязательно | Описание |
-|---|---|---|---|
-| `organizerId` | long | Да | ID создателя |
-| `fromTime` | datetime | Да | Начало |
-| `toTime` | datetime | Да | Конец (> `fromTime`) |
-| `category` | string | Да | Категория |
-| `nameEvent` | string | Да | Название |
-| `paidInCoins` | boolean | Нет | Начислять ли награду |
-| `rewardCoins` | number | Если `paidInCoins` | Монет каждому участнику |
-| `rewardRating` | number | Нет | Рейтинга каждому участнику |
-
-**Пример запроса:**
-```http
-POST /api/events
-Content-Type: application/json
-
 {
   "organizerId": 3,
   "fromTime": "2026-12-01T10:00:00",
@@ -263,109 +156,88 @@ Content-Type: application/json
 }
 ```
 
-**Ответ `201 Created`:**
+### `PUT /api/events/{id}/assign`
+**Тело запроса:** `{ "actorId": 2 }` (требует права `EVENT_APPROVE`).
+
+---
+
+## 6. Участники событий (Participants)
+
+### Таблица эндпоинтов
+| Метод | Путь | Описание | Доступ |
+|---|---|---|---|
+| `POST` | `/api/events/{eventId}/participants` | Записаться на событие | `EMPLOYEE`+ |
+| `DELETE` | `/api/events/{eventId}/participants/{userId}` | Отписаться | `EMPLOYEE`+ |
+| `GET` | `/api/events/{eventId}/participants` | Список участников | Все |
+
+### `POST /api/events/{eventId}/participants`
+Записаться можно только на событие в статусе `ASSIGNED`. Организатор не может быть участником.
+**Тело запроса:** `{ "userId": 4 }`
+
+---
+
+## 7. Магазин и Заказы (Shop)
+
+### Таблица эндпоинтов
+| Метод | Путь | Описание | Доступ |
+|---|---|---|---|
+| `POST` | `/api/shop/products?actorId={id}` | Создать товар | `ADMIN` |
+| `GET` | `/api/shop/products` | Витрина товаров | Все |
+| `POST` | `/api/shop/purchase` | Купить товар | Все |
+| `GET` | `/api/shop/orders/{userId}` | История заказов | Все |
+| `GET` | `/api/shop/orders/pending?actorId={id}` | Заказы на модерации | `MANAGER`, `HR`, `ADMIN` |
+| `PUT` | `/api/shop/orders/{orderId}/approve?actorId={id}` | Подтвердить заказ | `MANAGER`, `HR`, `ADMIN` |
+| `PUT` | `/api/shop/orders/{orderId}/reject?actorId={id}&reason={text}` | Отклонить (возврат) | `MANAGER`, `HR`, `ADMIN` |
+| `PUT` | `/api/shop/orders/{orderId}/complete?actorId={id}` | Завершить заказ | `MANAGER`, `HR`, `ADMIN` |
+
+### `POST /api/shop/products`
+Только для администратора.
+**Тело запроса:**
 ```json
 {
-  "id": 1,
-  "organizerId": 3,
-  "organizerName": "Иван Организатор",
-  "fromTime": "2026-12-01T10:00:00",
-  "toTime": "2026-12-01T12:00:00",
-  "category": "IT",
-  "nameEvent": "Spring Boot Workshop",
-  "eventStatus": "NEW",
-  "paidInCoins": true,
-  "rewardCoins": 100.00,
-  "rewardRating": 5.0,
-  "rewardsGranted": false
+  "name": "Отгул на полдня",
+  "description": "Возможность уйти домой пораньше",
+  "price": 1000.00,
+  "stock": 10,
+  "imageUrl": "https://example.com/perk.png"
 }
 ```
 
----
-
-### `PUT /api/events/{id}/assign` — Одобрить событие
-Переводит событие `NEW → ASSIGNED`. **Требует права `EVENT_APPROVE` (доступно HR и ADMIN).**
-
+### `POST /api/shop/purchase`
+Списывает монеты (создает транзакцию `PURCHASE`) и резервирует товар. Заказ получает статус `PENDING`.
 **Тело запроса:**
-```json
-{ "actorId": 2 }
-```
-**Ответ `200 OK`:** Возвращает обновленный объект события со статусом `"eventStatus": "ASSIGNED"`.
-**Ошибки:**
-- `403` — если `actorId` не имеет прав (например, EMPLOYEE или ORGANIZER).
-
----
-
-### `PUT /api/events/{id}/cancel` — Отменить событие
-**Ответ `200 OK`:** Возвращает объект события со статусом `"eventStatus": "CANCELLED"`.
-
----
-
-### `GET /api/events` — Получить список событий
-Возвращает список событий. Видимость зависит от роли (`actorId`):
-- **Без `actorId` или обычный сотрудник:** не видит события в статусе `NEW`.
-- **HR / ADMIN (с `EVENT_VIEW_ANY`):** видят все события.
-
-**Query parameters:**
-- `actorId` (optional) — ID того, кто запрашивает.
-
-**Пример ответа:**
-```json
-[
-  {
-    "id": 1,
-    "nameEvent": "Spring Boot Workshop",
-    "eventStatus": "ASSIGNED",
-    "organizerId": 3,
-    ...
-  }
-]
-```
-
----
-
-## Участники событий (Participants)
-
-### `POST /api/events/{eventId}/participants` — Записаться на событие
-Записаться может любой пользователь, кроме организатора этого события. Событие должно быть в статусе `ASSIGNED`.
-
-**Тело запроса:**
-```json
-{ "userId": 4 }
-```
-
-**Ответ `201 Created`:**
 ```json
 {
   "userId": 4,
-  "name": "Мария Сотрудник",
-  "email": "maria@tms.local"
+  "productId": 1,
+  "quantity": 1
 }
 ```
 
-**Ошибки:**
-- `400` — событие не в статусе `ASSIGNED`.
-- `400` — организатор не может быть участником.
-- `400` — пользователь уже записан.
+### `GET /api/shop/orders/pending?actorId=5`
+Менеджер получает список заказов, которые нужно выдать или одобрить (статус `PENDING`).
+
+### `PUT /api/shop/orders/{orderId}/approve?actorId=5`
+Менеджер подтверждает заказ. Статус меняется на `APPROVED`.
+*Опционально: `&comment=Согласовано`*.
+
+### `PUT /api/shop/orders/{orderId}/reject?actorId=5&reason=Нет%20слотов`
+Менеджер отклоняет заказ. Статус меняется на `REJECTED`.
+**Логика:**
+1. Товар возвращается на склад (stock += quantity).
+2. Монеты возвращаются на баланс пользователя.
+3. Создается транзакция типа `REFUND`.
+
+### `PUT /api/shop/orders/{orderId}/complete?actorId=5`
+Менеджер подтверждает, что услуга оказана / товар выдан. Статус меняется на `COMPLETED`.
 
 ---
 
-### `DELETE /api/events/{eventId}/participants/{userId}` — Отписаться
-**Ответ `204 No Content`.** Удаляет запись об участии.
+## 8. Фоновые процессы
 
----
-
-### `GET /api/events/{eventId}/participants` — Список участников
-**Ответ `200 OK`:** Массив объектов `{ userId, name, email }`.
-
----
-
-## Системные процессы (Фоновые задачи)
-
-### Автоматическое завершение и начисление наград
-1. **Планировщик (`EventSchedulerService`)** просыпается каждые 30 секунд.
-2. Находит все события, где `status = ASSIGNED` и `toTime < текущего времени`.
-3. Вызывает логику завершения (`EventRewardService`):
-    - Если `paidInCoins = true`, всем участникам начисляются `rewardCoins` (в баланс) и `rewardRating` (в рейтинг).
-    - Создается запись в журнале транзакций с типом `EVENT_REWARD`.
-    - Событие переводится в статус `COMPLETED`, а флаг `rewardsGranted` становится `true` (защита от повторного начисления).
+### Автоматическое завершение событий (Scheduler)
+Каждые 30 секунд планировщик (`EventSchedulerService`) проверяет базу данных:
+1. Находит события со статусом `ASSIGNED`, у которых `toTime` уже в прошлом.
+2. Если у события `paidInCoins = true`, всем участникам начисляются `rewardCoins` (в баланс) и `rewardRating` (в рейтинг).
+3. Создается запись в журнале транзакций с типом `EVENT_REWARD`.
+4. Событие переводится в статус `COMPLETED`, а флаг `rewardsGranted` становится `true` (защита от повторного начисления).

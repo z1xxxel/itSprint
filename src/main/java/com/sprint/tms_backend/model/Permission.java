@@ -19,5 +19,7 @@ public enum Permission {
 
     // Пользователи
     USER_MANAGE,
-    ROLE_ASSIGN
+    ROLE_ASSIGN,
+
+    ORDER_MANAGE, // Управление заказами (подтверждение/отклонение)
 }

@@ -2,7 +2,7 @@ package com.sprint.tms_backend.controller;
 
 import com.sprint.tms_backend.DTO.AssignEventRequest;
 import com.sprint.tms_backend.DTO.CreateEventRequestDTO;
-import com.sprint.tms_backend.model.Event;
+import com.sprint.tms_backend.DTO.EventResponseDTO;
 import com.sprint.tms_backend.service.EventService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -19,8 +19,8 @@ public class EventController {
     private final EventService eventService;
 
     @PostMapping
-    public ResponseEntity<Event> createEvent(@RequestBody CreateEventRequestDTO request) {
-        Event createdEvent = eventService.createEvent(
+    public ResponseEntity<EventResponseDTO> createEvent(@RequestBody CreateEventRequestDTO request) {
+        EventResponseDTO createdEvent = eventService.createEvent(
                 request.organizerId(),
                 request.fromTime(),
                 request.toTime(),
@@ -37,24 +37,24 @@ public class EventController {
     }
 
     @PutMapping("/{id}/cancel")
-    public ResponseEntity<Event> cancelEvent(@PathVariable Long id) {
+    public ResponseEntity<EventResponseDTO> cancelEvent(@PathVariable Long id) {
         return ResponseEntity.ok(eventService.cancelEvent(id));
     }
 
     @PutMapping("/{id}/assign")
-    public ResponseEntity<Event> assignEvent(@PathVariable Long id,
-                                             @RequestBody AssignEventRequest request) {
+    public ResponseEntity<EventResponseDTO> assignEvent(@PathVariable Long id,
+                                                        @RequestBody AssignEventRequest request) {
         return ResponseEntity.ok(eventService.assignEvent(id, request.actorId()));
     }
 
     @GetMapping
-    public ResponseEntity<List<Event>> getAllEvents(
+    public ResponseEntity<List<EventResponseDTO>> getAllEvents(
             @RequestParam(required = false) Long actorId) {
         return ResponseEntity.ok(eventService.getAllEvents(actorId));
     }
 
     @GetMapping("/organizer/{organizerId}")
-    public ResponseEntity<List<Event>> getEventsByOrganizer(
+    public ResponseEntity<List<EventResponseDTO>> getEventsByOrganizer(
             @PathVariable Long organizerId,
             @RequestParam(required = false) Long actorId) {
         return ResponseEntity.ok(eventService.getEventsByUser(organizerId, actorId));

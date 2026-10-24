@@ -1,9 +1,7 @@
 package com.sprint.tms_backend.service;
 
-import com.sprint.tms_backend.model.Event;
-import com.sprint.tms_backend.model.EventParticipant;
-import com.sprint.tms_backend.model.EventStatus;
-import com.sprint.tms_backend.model.User;
+import com.sprint.tms_backend.model.*;
+import com.sprint.tms_backend.repository.CoinTransactionRepository;
 import com.sprint.tms_backend.repository.EventParticipantRepository;
 import com.sprint.tms_backend.repository.EventRepository;
 import com.sprint.tms_backend.repository.UserRepository;
@@ -23,19 +21,18 @@ public class EventRewardService {
     private final EventRepository eventRepository;
     private final EventParticipantRepository participantRepository;
     private final UserRepository userRepository;
+    private final CoinTransactionRepository coinTxRepository;
 
     @Transactional
     public void completeAndAward(Long eventId) {
-        // Блокировка строки — защита от параллельного вызова
         Event event = eventRepository.findByIdForUpdate(eventId)
                 .orElseThrow(() -> new RuntimeException("Ивент не найден"));
 
-        // Только ASSIGNED → COMPLETED
         if (event.getEventStatus() != EventStatus.ASSIGNED) {
             return;
         }
 
-        // Идемпотентность: награда уже выдана
+        // Идемпотентность
         if (Boolean.TRUE.equals(event.getRewardsGranted())) {
             event.setEventStatus(EventStatus.COMPLETED);
             eventRepository.save(event);
@@ -45,19 +42,31 @@ public class EventRewardService {
         boolean paid = Boolean.TRUE.equals(event.getPaidInCoins());
         if (paid) {
             List<EventParticipant> participants = participantRepository.findByEventId(eventId);
+
             for (EventParticipant p : participants) {
                 User user = p.getUser();
+                BigDecimal currentBalance = user.getBalance() != null
+                        ? user.getBalance() : BigDecimal.ZERO;
 
                 if (event.getRewardCoins() != null) {
-                    BigDecimal current = user.getBalance() != null
-                            ? user.getBalance() : BigDecimal.ZERO;
-                    user.setBalance(current.add(event.getRewardCoins()));
+                    user.setBalance(currentBalance.add(event.getRewardCoins()));
                 }
                 if (event.getRewardRating() != null) {
                     double currentRating = user.getRating() != null ? user.getRating() : 0.0;
                     user.setRating(currentRating + event.getRewardRating());
                 }
                 userRepository.save(user);
+
+                // Запись в журнал
+                if (event.getRewardCoins() != null) {
+                    CoinTransaction tx = new CoinTransaction();
+                    tx.setFromUserId(null);  // эмиссия
+                    tx.setToUserId(user.getId());
+                    tx.setAmount(event.getRewardCoins());
+                    tx.setType(CoinTransactionType.EVENT_REWARD);
+                    tx.setComment("Награда за событие #" + eventId + ": " + event.getNameEvent());
+                    coinTxRepository.save(tx);
+                }
             }
             log.info("Событие {} завершено. Награда выдана {} участникам",
                     eventId, participants.size());

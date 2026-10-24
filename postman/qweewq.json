@@ -1,0 +1,308 @@
+{
+  "info": {
+    "name": "TMS Backend — Universal Auto Tests",
+    "description": "Изолированные автотесты. Каждый запуск создает уникальных пользователей. Не зависит от остатков в БД.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" }
+  ],
+  "item": [
+    {
+      "name": "00. Setup (Create unique users)",
+      "item": [
+        {
+          "name": "Generate RunId & Create Users",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Генерируем уникальный ID для этого запуска",
+                  "const runId = Date.now() + '_' + Math.floor(Math.random() * 1000);",
+                  "pm.collectionVariables.set('runId', runId);",
+                  "",
+                  "// Функция для создания пользователя",
+                  "const createUser = (role, balance, callback) => {",
+                  "  const email = role.toLowerCase() + '_' + runId + '@test.local';",
+                  "  pm.sendRequest({",
+                  "    url: pm.collectionVariables.get('baseUrl') + '/api/users',",
+                  "    method: 'POST',",
+                  "    header: { 'Content-Type': 'application/json' },",
+                  "    body: {",
+                  "      mode: 'raw',",
+                  "      raw: JSON.stringify({",
+                  "        name: role + ' ' + runId,",
+                  "        email: email,",
+                  "        password: 'secret123',",
+                  "        role: role,",
+                  "        balance: balance",
+                  "      })",
+                  "    }",
+                  "  }, (err, res) => {",
+                  "    if (!err && res.code === 200) {",
+                  "      callback(res.json().id);",
+                  "    } else {",
+                  "      console.error('Failed to create ' + role, res.text());",
+                  "    }",
+                  "  });",
+                  "};",
+                  "",
+                  "// Создаем пул пользователей (выполняется асинхронно)",
+                  "createUser('ADMIN', 10000, (id) => pm.collectionVariables.set('adminId', id));",
+                  "createUser('HR', 1000, (id) => pm.collectionVariables.set('hrId', id));",
+                  "createUser('ORGANIZER', 500, (id) => pm.collectionVariables.set('organizerId', id));",
+                  "createUser('EMPLOYEE', 0, (id) => pm.collectionVariables.set('employeeId', id));",
+                  "createUser('MANAGER', 2000, (id) => pm.collectionVariables.set('managerId', id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01. Events & Permissions",
+      "item": [
+        {
+          "name": "Create event (ORGANIZER)",
+          "event": [
+            { "listen": "prerequest", "script": { "exec": [
+              "const now = Date.now();",
+              "const fmt = (ms) => new Date(ms).toISOString().slice(0, 19);",
+              "pm.collectionVariables.set('fromTime', fmt(now + 3600000));",
+              "pm.collectionVariables.set('toTime', fmt(now + 7200000));"
+            ] } },
+            { "listen": "test", "script": { "exec": [
+              "pm.test('201 Created', () => pm.response.to.have.status(201));",
+              "const b = pm.response.json();",
+              "pm.collectionVariables.set('eventId', b.id);",
+              "pm.test('status=NEW', () => pm.expect(b.eventStatus).to.eql('NEW'));",
+              "pm.test('paidInCoins=true', () => pm.expect(b.paidInCoins).to.be.true);"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"organizerId\": {{organizerId}},\n  \"fromTime\": \"{{fromTime}}\",\n  \"toTime\": \"{{toTime}}\",\n  \"category\": \"IT\",\n  \"nameEvent\": \"Event {{runId}}\",\n  \"paidInCoins\": true,\n  \"rewardCoins\": 100.00,\n  \"rewardRating\": 5.0\n}" },
+            "url": { "raw": "{{baseUrl}}/api/events", "host": ["{{baseUrl}}"], "path": ["api", "events"] }
+          }
+        },
+        {
+          "name": "Assign as EMPLOYEE → 403",
+          "event": [
+            { "listen": "test", "script": { "exec": ["pm.test('403 forbidden', () => pm.response.to.have.status(403));"] } }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"actorId\": {{employeeId}}\n}" },
+            "url": { "raw": "{{baseUrl}}/api/events/{{eventId}}/assign", "host": ["{{baseUrl}}"], "path": ["api", "events", "{{eventId}}", "assign"] }
+          }
+        },
+        {
+          "name": "Assign as HR → 200",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('status=ASSIGNED', () => pm.expect(pm.response.json().eventStatus).to.eql('ASSIGNED'));"
+            ] } }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"actorId\": {{hrId}}\n}" },
+            "url": { "raw": "{{baseUrl}}/api/events/{{eventId}}/assign", "host": ["{{baseUrl}}"], "path": ["api", "events", "{{eventId}}", "assign"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Participants",
+      "item": [
+        {
+          "name": "Register EMPLOYEE → 201",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('201 Created', () => pm.response.to.have.status(201));",
+              "pm.test('userId matches', () => pm.expect(pm.response.json().userId).to.eql(parseInt(pm.collectionVariables.get('employeeId'))));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": {{employeeId}}\n}" },
+            "url": { "raw": "{{baseUrl}}/api/events/{{eventId}}/participants", "host": ["{{baseUrl}}"], "path": ["api", "events", "{{eventId}}", "participants"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Transfers & Limits (Isolated)",
+      "item": [
+        {
+          "name": "Test Peer-to-Peer Limit (Creates fresh users)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Создаем двух абсолютно новых пользователей для теста лимитов, чтобы не зависеть от дневного лимита прошлых запусков",
+                  "const runId = pm.collectionVariables.get('runId');",
+                  "const createUser = (role, callback) => {",
+                  "  pm.sendRequest({",
+                  "    url: pm.collectionVariables.get('baseUrl') + '/api/users',",
+                  "    method: 'POST',",
+                  "    header: { 'Content-Type': 'application/json' },",
+                  "    body: { mode: 'raw', raw: JSON.stringify({",
+                  "      name: 'Limiter_' + role + '_' + runId, email: 'limit_' + role + '_' + runId + '@test.local',",
+                  "      password: 'secret123', role: 'EMPLOYEE', balance: 200",
+                  "    })}",
+                  "  }, (err, res) => { if (!err && res.code === 200) callback(res.json().id); });",
+                  "};",
+                  "createUser('A', (id) => pm.collectionVariables.set('limiterA_Id', id));",
+                  "createUser('B', (id) => pm.collectionVariables.set('limiterB_Id', id));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Внутри теста делаем 2 перевода по 30. Второй должен упасть (30+30=60 > 50).",
+                  "const baseUrl = pm.collectionVariables.get('baseUrl');",
+                  "const fromId = pm.collectionVariables.get('limiterA_Id');",
+                  "const toId = pm.collectionVariables.get('limiterB_Id');",
+                  "",
+                  "const sendTransfer = (amount) => {",
+                  "  return new Promise((resolve) => {",
+                  "    pm.sendRequest({",
+                  "      url: baseUrl + '/api/transfers', method: 'POST',",
+                  "      header: { 'Content-Type': 'application/json' },",
+                  "      body: { mode: 'raw', raw: JSON.stringify({ fromUserId: fromId, toUserId: toId, amount: amount, comment: 'test' }) }",
+                  "    }, (err, res) => resolve(res));",
+                  "  });",
+                  "};",
+                  "",
+                  "sendTransfer(30).then(res1 => {",
+                  "  pm.test('First 30 OK', () => pm.expect(res1.code).to.eql(200));",
+                  "  return sendTransfer(30);",
+                  "}).then(res2 => {",
+                  "  pm.test('Second 30 fails (limit 50)', () => pm.expect(res2.code).to.eql(400));",
+                  "  pm.test('Error mentions limit', () => pm.expect(res2.text()).to.match(/лимит/i));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. Grants",
+      "item": [
+        {
+          "name": "Grant as MANAGER → 200",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('type=MANAGER_BONUS', () => pm.expect(pm.response.json().type).to.eql('MANAGER_BONUS'));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"actorId\": {{managerId}},\n  \"toUserId\": {{employeeId}},\n  \"amount\": 100.00,\n  \"comment\": \"Release bonus\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/transfers/grant", "host": ["{{baseUrl}}"], "path": ["api", "transfers", "grant"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05. Completion & Award",
+      "item": [
+        {
+          "name": "Create past event & assign",
+          "event": [
+            { "listen": "prerequest", "script": { "exec": [
+              "const now = Date.now();",
+              "const fmt = (ms) => new Date(ms).toISOString().slice(0, 19);",
+              "pm.collectionVariables.set('pastFrom', fmt(now - 7200000));",
+              "pm.collectionVariables.set('pastTo', fmt(now - 3600000));"
+            ] } },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Created', () => pm.response.to.have.status(201));",
+                  "const evId = pm.response.json().id;",
+                  "pm.collectionVariables.set('pastEventId', evId);",
+                  "const baseUrl = pm.collectionVariables.get('baseUrl');",
+                  "const hrId = pm.collectionVariables.get('hrId');",
+                  "",
+                  "// Сразу назначаем",
+                  "pm.sendRequest({",
+                  "  url: baseUrl + '/api/events/' + evId + '/assign', method: 'PUT',",
+                  "  header: { 'Content-Type': 'application/json' },",
+                  "  body: { mode: 'raw', raw: JSON.stringify({ actorId: hrId }) }",
+                  "}, (err, res) => {",
+                  "  pm.test('Assigned OK', () => pm.expect(res.code).to.eql(200));",
+                  "  // Регистрируем сотрудника",
+                  "  pm.sendRequest({",
+                  "    url: baseUrl + '/api/events/' + evId + '/participants', method: 'POST',",
+                  "    header: { 'Content-Type': 'application/json' },",
+                  "    body: { mode: 'raw', raw: JSON.stringify({ userId: pm.collectionVariables.get('employeeId') }) }",
+                  "  }, (err2, res2) => pm.test('Registered OK', () => pm.expect(res2.code).to.eql(201)));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"organizerId\": {{organizerId}},\n  \"fromTime\": \"{{pastFrom}}\",\n  \"toTime\": \"{{pastTo}}\",\n  \"category\": \"IT\",\n  \"nameEvent\": \"Past Event {{runId}}\",\n  \"paidInCoins\": true,\n  \"rewardCoins\": 100.00,\n  \"rewardRating\": 5.0\n}" },
+            "url": { "raw": "{{baseUrl}}/api/events", "host": ["{{baseUrl}}"], "path": ["api", "events"] }
+          }
+        },
+        {
+          "name": "Wait for Scheduler (35s)",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "const start = Date.now(); while(Date.now() - start < 35000) {}",
+              "pm.test('waited', () => pm.expect(true).to.be.true);"
+            ] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        },
+        {
+          "name": "Check Award",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const user = pm.response.json();",
+              "// Изначально было 0. Плюс 100 от менеджера (grant) плюс 100 от события = 200",
+              "pm.test('Balance is 200 (100 grant + 100 award)', () => pm.expect(parseFloat(user.balance)).to.eql(200));",
+              "pm.test('Rating is 5.0', () => pm.expect(user.rating).to.eql(5.0));"
+            ] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users/{{employeeId}}", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{employeeId}}"] }
+          }
+        }
+      ]
+    }
+  ]
+}

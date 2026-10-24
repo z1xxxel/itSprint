@@ -1,284 +1,278 @@
 # API Documentation — TMS Backend
 
 Базовый URL: `http://localhost:8080`
-
-Все запросы и ответы — в формате `application/json`.
+Все запросы и ответы передаются в формате `application/json`.
 
 ## Содержание
-
 - [Общие сведения](#общие-сведения)
-- [Роли и разрешения](#роли-и-разрешения)
-- [Пользователи](#пользователи)
-- [Переводы монет](#переводы-монет)
-- [События](#события)
-- [Участники событий](#участники-событий)
-- [Коды ответов](#коды-ответов)
-- [Жизненный цикл события](#жизненный-цикл-события)
+- [Ролевая модель (RBAC)](#ролевая-модель-rbac)
+- [Пользователи (Users)](#пользователи-users)
+- [Переводы и Начисления (Economy)](#переводы-и-начисления-economy)
+- [События (Events)](#события-events)
+- [Участники событий (Participants)](#участники-событий-participants)
+- [Системные процессы (Фоновые задачи)](#системные-процессы-фоновые-задачи)
 
 ---
 
 ## Общие сведения
 
 ### Формат даты
+Для дат используется стандарт ISO-8601 без таймзоны:
+`2026-11-01T10:00:00`
 
-`LocalDateTime` — ISO-8601 без таймзоны:
+### Перечисления (Enums)
+**EventStatus** (Статус события):
+- `NEW` — создано, ожидает одобрения.
+- `ASSIGNED` — одобрено, активно, можно регистрироваться.
+- `COMPLETED` — завершено (автоматически после `toTime`).
+- `CANCELLED` — отменено.
 
-```
-2026-11-01T10:00:00
-```
-
-### Enums
-
-**UserRole** — см. раздел [Роли и разрешения](#роли-и-разрешения).
-
-**EventStatus**
-
-| Значение | Описание |
-|---|---|
-| `NEW` | Создано, ожидает назначения администратором / HR |
-| `ASSIGNED` | Принято, активно, можно регистрироваться |
-| `COMPLETED` | Завершено (автоматически после `toTime`) |
-| `CANCELLED` | Отменено |
+**CoinTransactionType** (Тип операции с монетами):
+- `PEER_THANKS` — перевод сотрудником коллеге.
+- `EVENT_REWARD` — награда за участие в событии.
+- `MANAGER_BONUS` — премия от руководителя.
+- `PURCHASE` — списание монет (каталог).
+- `ADMIN_ADJUSTMENT` — ручная правка от админа.
 
 ---
 
-## Роли и разрешения
+## Ролевая модель (RBAC)
 
-В системе **5 ролей**. Каждая роль — это набор разрешений (`Permission`). Проверки в коде идут по разрешениям, а не по роли, поэтому расширение — добавление `Permission` в enum, без правки сервисов.
+В системе используются роли, каждая из которых имеет набор прав (`Permission`).
 
-### Роли
-
-| Роль | Кто это | Основные возможности |
+| Роль | Описание | Ключевые права |
 |---|---|---|
-| `EMPLOYEE` | Обычный сотрудник | Создавать события, переводить монеты, покупать в каталоге |
-| `ORGANIZER` | Ответственный за мероприятия | Всё как `EMPLOYEE` + редактировать любые события |
-| `MANAGER` | Руководитель | Всё как `EMPLOYEE` + начислять бонусы подчинённым |
-| `HR` | HR / модератор | Approve событий (`NEW → ASSIGNED`), видеть все `NEW`, управлять пользователями |
-| `ADMIN` | Технический админ | Полный доступ (все `Permission`) |
+| `EMPLOYEE` | Обычный сотрудник | Переводы монет, создание событий, просмотр |
+| `ORGANIZER` | Организатор | Всё как `EMPLOYEE` + редактирование любых событий |
+| `MANAGER` | Руководитель | Всё как `EMPLOYEE` + начисление бонусов (`MANAGER_BONUS`) |
+| `HR` | HR / Модератор | Одобрение событий (`NEW → ASSIGNED`), просмотр скрытых `NEW` |
+| `ADMIN` | Администратор | Полный доступ ко всем функциям и ручная правка баланса |
 
-### Разрешения
-
-| Permission | EMPLOYEE | ORGANIZER | MANAGER | HR | ADMIN |
-|---|:---:|:---:|:---:|:---:|:---:|
-| `EVENT_CREATE` | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `EVENT_EDIT_OWN` | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `EVENT_EDIT_ANY` | ❌ | ✅ | ❌ | ✅ | ✅ |
-| `EVENT_APPROVE` (NEW → ASSIGNED) | ❌ | ❌ | ❌ | ✅ | ✅ |
-| `EVENT_VIEW_ANY` (видеть `NEW`) | ❌ | ❌ | ❌ | ✅ | ✅ |
-| `COIN_TRANSFER` | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `COIN_GRANT_SUBORDINATE` | ❌ | ❌ | ✅ | ❌ | ✅ |
-| `COIN_GRANT_ANY` | ❌ | ❌ | ❌ | ❌ | ✅ |
-| `CATALOG_VIEW` | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `CATALOG_MANAGE` | ❌ | ❌ | ❌ | ❌ | ✅ |
-| `USER_MANAGE` | ❌ | ❌ | ❌ | ✅ | ✅ |
-| `ROLE_ASSIGN` | ❌ | ❌ | ❌ | ❌ | ✅ |
-
-### Как проверяется доступ
-
-- `assignEvent` → `Permission.EVENT_APPROVE`;
-- `getAllEvents` / `getEventsByUser` → `Permission.EVENT_VIEW_ANY`;
-- остальные эндпоинты пока без проверок, добавятся по мере появления.
+> **Важно:** В текущей MVP-версии идентификация пользователя происходит через передачу `actorId` в параметрах/теле запроса. Внедрение Spring Security/JWT запланировано на следующем этапе.
 
 ---
 
-## Пользователи
+## Пользователи (Users)
 
-### `POST /api/users` — создать пользователя
+### `POST /api/users` — Создать пользователя
+Создает нового сотрудника. Пароль сохраняется в БД, но **никогда** не возвращается в ответе.
 
-**Request body**
-
+**Тело запроса:**
 | Поле | Тип | Обязательно | Описание |
 |---|---|---|---|
-| `name` | string | да | Имя |
-| `email` | string | да | Уникальный email |
-| `password` | string | да | Пароль (не возвращается) |
-| `role` | `UserRole` | да | `EMPLOYEE` / `ORGANIZER` / `MANAGER` / `HR` / `ADMIN` |
-| `balance` | number | нет | По умолчанию `0` |
-| `rating` | number | нет | По умолчанию `0.0` |
+| `name` | string | Да | Имя пользователя |
+| `email` | string | Да | Уникальный email |
+| `password` | string | Да | Пароль |
+| `role` | string | Да | `EMPLOYEE`, `ORGANIZER`, `MANAGER`, `HR`, `ADMIN` |
+| `balance` | number | Нет | Начальный баланс (по умолчанию `0.00`) |
 
-**Пример запроса**
-
+**Пример запроса:**
 ```http
 POST /api/users
 Content-Type: application/json
 
 {
-  "name": "Мария Сотрудник",
-  "email": "maria@tms.local",
-  "password": "maria123",
+  "name": "Иван Иванов",
+  "email": "ivan@tms.local",
+  "password": "securepassword",
   "role": "EMPLOYEE",
   "balance": 0
 }
 ```
 
-**Пример ответа `200 OK`**
-
+**Ответ `200 OK`:**
 ```json
 {
-  "id": 3,
-  "name": "Мария Сотрудник",
-  "email": "maria@tms.local",
+  "id": 1,
+  "name": "Иван Иванов",
+  "email": "ivan@tms.local",
   "role": "EMPLOYEE",
   "rating": 0.0,
   "balance": 0.00
 }
 ```
 
-**Ошибки**
-
-| Код | Причина |
-|---|---|
-| `400` | Email уже существует |
-| `400` | Недопустимое значение `role` (не из enum) |
-
 ---
 
-### `GET /api/users` — все пользователи
+### `GET /api/users/{id}` — Получить пользователя
+**Ответ `200 OK`:** Возвращает объект пользователя (аналогично созданию).
 
+### `GET /api/users/{id}/transactions` — История операций
+Возвращает журнал движения монет пользователя с пагинацией.
+
+**Query parameters:**
+- `page` (default `0`) — номер страницы.
+- `size` (default `20`) — размер страницы.
+
+**Пример запроса:**
 ```http
-GET /api/users
+GET /api/users/1/transactions?page=0&size=10
 ```
 
-**Ответ `200 OK`** — массив объектов пользователей (поля те же).
-
----
-
-### `GET /api/users/{id}` — пользователь по ID
-
-```http
-GET /api/users/3
-```
-
-**Ответ `200 OK`**
-
+**Ответ `200 OK`:**
 ```json
 {
-  "id": 3,
-  "name": "Мария Сотрудник",
-  "email": "maria@tms.local",
-  "role": "EMPLOYEE",
-  "rating": 5.0,
-  "balance": 100.00
+  "content": [
+    {
+      "id": 42,
+      "fromUserId": null,
+      "toUserId": 1,
+      "amount": 100.00,
+      "type": "EVENT_REWARD",
+      "comment": "Награда за событие #5: Java Meetup",
+      "createdAt": "2026-10-18T15:30:00"
+    },
+    {
+      "id": 41,
+      "fromUserId": 1,
+      "toUserId": 2,
+      "amount": 50.00,
+      "type": "PEER_THANKS",
+      "comment": "Спасибо за помощь с релизом!",
+      "createdAt": "2026-10-18T14:00:00"
+    }
+  ],
+  "totalElements": 2,
+  "totalPages": 1
 }
 ```
 
-**Ошибки**
-
-| Код | Причина |
-|---|---|
-| `400` | Пользователь не найден |
-
 ---
 
-## Переводы монет
+## Переводы и Начисления (Economy)
 
-### `POST /api/transfers` — перевести монеты
+### `POST /api/transfers` — Перевод между сотрудниками
+Перевод монет от одного пользователя другому. Работают дневные лимиты.
 
-Атомарный перевод. Использует пессимистичную блокировку на обоих пользователях (в порядке возрастания ID — защита от deadlock).
-
-**Request body**
-
+**Тело запроса:**
 | Поле | Тип | Обязательно | Описание |
 |---|---|---|---|
-| `fromUserId` | long | да | ID отправителя |
-| `toUserId` | long | да | ID получателя |
-| `amount` | number | да | Сумма > 0 |
+| `fromUserId` | long | Да | Кто переводит |
+| `toUserId` | long | Да | Кому переводят |
+| `amount` | number | Да | Сумма перевода (> 0) |
+| `comment` | string | Да | Причина перевода («Спасибо!») |
 
-**Пример запроса**
-
+**Пример запроса:**
 ```http
 POST /api/transfers
 Content-Type: application/json
 
 {
   "fromUserId": 1,
-  "toUserId": 3,
-  "amount": 50.00
+  "toUserId": 2,
+  "amount": 30.00,
+  "comment": "Спасибо за помощь!"
 }
 ```
 
-**Ответ `200 OK`**
-
+**Ответ `200 OK`:**
 ```json
 {
-  "status": "OK",
-  "transactionId": 42,
-  "amount": 50.00
+  "id": 43,
+  "fromUserId": 1,
+  "toUserId": 2,
+  "amount": 30.00,
+  "type": "PEER_THANKS",
+  "comment": "Спасибо за помощь!",
+  "createdAt": "2026-10-18T15:35:00"
 }
 ```
 
-**Ошибки**
-
-| Код | Причина |
-|---|---|
-| `400` | Сумма <= 0 |
-| `400` | ID не переданы |
-| `400` | Перевод самому себе |
-| `400` | Отправитель/получатель не найден |
-| `400` | Недостаточно средств |
+**Ошибки:**
+- `400` — недостаточно средств.
+- `400` — превышен дневной лимит (50 монет одному коллеге, 200 в сумме).
+- `400` — перевод самому себе.
 
 ---
 
-## События
+### `POST /api/transfers/grant` — Начисление бонусов (MANAGER/ADMIN)
+Прямое начисление монет (эмиссия). Только для ролей `MANAGER` и `ADMIN`.
 
-### `POST /api/events` — создать событие
-
-Создаёт событие в статусе `NEW`.
-
-**Request body**
-
+**Тело запроса:**
 | Поле | Тип | Обязательно | Описание |
 |---|---|---|---|
-| `organizerId` | long | да | ID организатора |
-| `fromTime` | datetime | да | Начало |
-| `toTime` | datetime | да | Конец, должен быть > `fromTime` |
-| `category` | string | да | Категория |
-| `nameEvent` | string | да | Название |
-| `description` | string | нет | Описание |
-| `eventPlace` | string | нет | Место |
-| `commentToAdmin` | string | нет | Комментарий для админа |
-| `paidInCoins` | boolean | нет | Начислять ли награду |
-| `rewardCoins` | number | если `paidInCoins=true` | Монет каждому участнику (> 0) |
-| `rewardRating` | number | нет | Рейтинга каждому участнику (>= 0) |
+| `actorId` | long | Да | Кто начисляет (MANAGER или ADMIN) |
+| `toUserId` | long | Да | Кому начисляют |
+| `amount` | number | Да | Сумма |
+| `comment` | string | Нет | Причина (например, «Квартальная премия») |
 
-**Пример запроса — с наградой**
+**Пример запроса:**
+```http
+POST /api/transfers/grant
+Content-Type: application/json
 
+{
+  "actorId": 5, 
+  "toUserId": 1,
+  "amount": 500.00,
+  "comment": "Бонус за успешный релиз"
+}
+```
+
+**Ответ `200 OK`:**
+```json
+{
+  "id": 44,
+  "fromUserId": null, 
+  "toUserId": 1,
+  "amount": 500.00,
+  "type": "MANAGER_BONUS",
+  "comment": "Бонус за успешный релиз",
+  "createdAt": "2026-10-18T16:00:00"
+}
+```
+> *Примечание: Если начисляет ADMIN, тип операции будет `ADMIN_ADJUSTMENT`.*
+
+**Ошибки:**
+- `403` — у пользователя нет прав на начисление.
+- `400` — превышен лимит начислений менеджера.
+
+---
+
+## События (Events)
+
+### `POST /api/events` — Создать событие
+Создает мероприятие в статусе `NEW`.
+
+**Тело запроса:**
+| Поле | Тип | Обязательно | Описание |
+|---|---|---|---|
+| `organizerId` | long | Да | ID создателя |
+| `fromTime` | datetime | Да | Начало |
+| `toTime` | datetime | Да | Конец (> `fromTime`) |
+| `category` | string | Да | Категория |
+| `nameEvent` | string | Да | Название |
+| `paidInCoins` | boolean | Нет | Начислять ли награду |
+| `rewardCoins` | number | Если `paidInCoins` | Монет каждому участнику |
+| `rewardRating` | number | Нет | Рейтинга каждому участнику |
+
+**Пример запроса:**
 ```http
 POST /api/events
 Content-Type: application/json
 
 {
-  "organizerId": 2,
-  "fromTime": "2026-11-01T10:00:00",
-  "toTime": "2026-11-01T12:00:00",
+  "organizerId": 3,
+  "fromTime": "2026-12-01T10:00:00",
+  "toTime": "2026-12-01T12:00:00",
   "category": "IT",
   "nameEvent": "Spring Boot Workshop",
-  "description": "Воркшоп",
-  "eventPlace": "Москва, офис 5",
-  "commentToAdmin": "Прошу подтвердить",
   "paidInCoins": true,
   "rewardCoins": 100.00,
   "rewardRating": 5.0
 }
 ```
 
-**Ответ `201 Created`**
-
+**Ответ `201 Created`:**
 ```json
 {
   "id": 1,
-  "fromTime": "2026-11-01T10:00:00",
-  "toTime": "2026-11-01T12:00:00",
+  "organizerId": 3,
+  "organizerName": "Иван Организатор",
+  "fromTime": "2026-12-01T10:00:00",
+  "toTime": "2026-12-01T12:00:00",
   "category": "IT",
   "nameEvent": "Spring Boot Workshop",
-  "organizer": {
-    "id": 2,
-    "name": "Иван Организатор",
-    "email": "ivan@tms.local",
-    "role": "ORGANIZER",
-    "rating": 0.0,
-    "balance": 500.00
-  },
   "eventStatus": "NEW",
   "paidInCoins": true,
   "rewardCoins": 100.00,
@@ -287,295 +281,91 @@ Content-Type: application/json
 }
 ```
 
-**Ошибки**
+---
 
-| Код | Причина |
-|---|---|
-| `400` | `fromTime` не раньше `toTime` |
-| `400` | Организатор не найден |
-| `400` | `paidInCoins=true` и `rewardCoins` отсутствует / <= 0 |
-| `400` | `rewardRating < 0` |
+### `PUT /api/events/{id}/assign` — Одобрить событие
+Переводит событие `NEW → ASSIGNED`. **Требует права `EVENT_APPROVE` (доступно HR и ADMIN).**
+
+**Тело запроса:**
+```json
+{ "actorId": 2 }
+```
+**Ответ `200 OK`:** Возвращает обновленный объект события со статусом `"eventStatus": "ASSIGNED"`.
+**Ошибки:**
+- `403` — если `actorId` не имеет прав (например, EMPLOYEE или ORGANIZER).
 
 ---
 
-### `PUT /api/events/{id}/assign` — назначить событие (`NEW → ASSIGNED`)
+### `PUT /api/events/{id}/cancel` — Отменить событие
+**Ответ `200 OK`:** Возвращает объект события со статусом `"eventStatus": "CANCELLED"`.
 
-**Требуется `Permission.EVENT_APPROVE`** (HR или ADMIN).
+---
 
-**Path params**
+### `GET /api/events` — Получить список событий
+Возвращает список событий. Видимость зависит от роли (`actorId`):
+- **Без `actorId` или обычный сотрудник:** не видит события в статусе `NEW`.
+- **HR / ADMIN (с `EVENT_VIEW_ANY`):** видят все события.
 
-| Параметр | Тип | Описание |
-|---|---|---|
-| `id` | long | ID события |
+**Query parameters:**
+- `actorId` (optional) — ID того, кто запрашивает.
 
-**Request body**
-
-| Поле | Тип | Обязательно | Описание |
-|---|---|---|---|
-| `actorId` | long | да | ID того, кто выполняет действие |
-
-**Пример запроса**
-
-```http
-PUT /api/events/1/assign
-Content-Type: application/json
-
-{ "actorId": 1 }
+**Пример ответа:**
+```json
+[
+  {
+    "id": 1,
+    "nameEvent": "Spring Boot Workshop",
+    "eventStatus": "ASSIGNED",
+    "organizerId": 3,
+    ...
+  }
+]
 ```
 
-**Ответ `200 OK`**
+---
 
+## Участники событий (Participants)
+
+### `POST /api/events/{eventId}/participants` — Записаться на событие
+Записаться может любой пользователь, кроме организатора этого события. Событие должно быть в статусе `ASSIGNED`.
+
+**Тело запроса:**
+```json
+{ "userId": 4 }
+```
+
+**Ответ `201 Created`:**
 ```json
 {
-  "id": 1,
-  "eventStatus": "ASSIGNED",
-  "rewardsGranted": false,
-  ...
-}
-```
-
-**Ошибки**
-
-| Код | Причина |
-|---|---|
-| `403` | У актора нет `EVENT_APPROVE` |
-| `400` | Событие не найдено |
-| `400` | Текущий статус не `NEW` |
-| `400` | Актор не найден |
-
----
-
-### `PUT /api/events/{id}/cancel` — отменить событие
-
-**Path params**
-
-| Параметр | Тип |
-|---|---|
-| `id` | long |
-
-**Пример запроса**
-
-```http
-PUT /api/events/1/cancel
-```
-
-**Ответ `200 OK`**
-
-```json
-{ "id": 1, "eventStatus": "CANCELLED", ... }
-```
-
-**Ошибки**
-
-| Код | Причина |
-|---|---|
-| `400` | Событие не найдено |
-| `400` | Уже `COMPLETED` |
-| `400` | Уже `CANCELLED` |
-
----
-
-### `GET /api/events` — все события
-
-Возвращает события с учётом прав актора:
-
-- **без `actorId`** или без `EVENT_VIEW_ANY` → всё, **кроме `NEW`**;
-- **с `EVENT_VIEW_ANY`** (HR, ADMIN) → **все**, включая `NEW`.
-
-**Query params**
-
-| Параметр | Тип | Обязательно | Описание |
-|---|---|---|---|
-| `actorId` | long | нет | Кто запрашивает |
-
-**Пример запроса — HR**
-
-```http
-GET /api/events?actorId=4
-```
-
-**Пример запроса — сотрудник**
-
-```http
-GET /api/events?actorId=3
-```
-
-**Ответ `200 OK`** — массив `Event`. Поле `NEW` присутствует только в ответе HR/ADMIN.
-
----
-
-### `GET /api/events/organizer/{organizerId}` — события организатора
-
-- **HR / ADMIN / сам организатор** → все, включая `NEW`;
-- **остальные** → только не-`NEW`.
-
-**Path params**
-
-| Параметр | Тип |
-|---|---|
-| `organizerId` | long |
-
-**Query params**
-
-| Параметр | Тип | Обязательно |
-|---|---|---|
-| `actorId` | long | нет |
-
-**Пример запроса**
-
-```http
-GET /api/events/organizer/2?actorId=3
-```
-
-**Ответ `200 OK`** — массив `Event` этого организатора.
-
----
-
-## Участники событий
-
-Участвовать может любой пользователь, **кроме организатора** этого события. Записаться можно только на событие в статусе `ASSIGNED`.
-
-### `POST /api/events/{eventId}/participants` — записаться на событие
-
-**Path params**
-
-| Параметр | Тип |
-|---|---|
-| `eventId` | long |
-
-**Request body**
-
-| Поле | Тип | Обязательно |
-|---|---|---|
-| `userId` | long | да |
-
-**Пример запроса**
-
-```http
-POST /api/events/1/participants
-Content-Type: application/json
-
-{ "userId": 3 }
-```
-
-**Ответ `201 Created`**
-
-```json
-{
-  "userId": 3,
+  "userId": 4,
   "name": "Мария Сотрудник",
   "email": "maria@tms.local"
 }
 ```
 
-**Ошибки**
-
-| Код | Причина |
-|---|---|
-| `400` | Событие не найдено |
-| `400` | Статус события не `ASSIGNED` |
-| `400` | Пользователь не найден |
-| `400` | Пользователь — организатор этого события |
-| `400` | Пользователь уже зарегистрирован |
+**Ошибки:**
+- `400` — событие не в статусе `ASSIGNED`.
+- `400` — организатор не может быть участником.
+- `400` — пользователь уже записан.
 
 ---
 
-### `DELETE /api/events/{eventId}/participants/{userId}` — отписаться
-
-**Path params**
-
-| Параметр | Тип |
-|---|---|
-| `eventId` | long |
-| `userId` | long |
-
-**Пример запроса**
-
-```http
-DELETE /api/events/1/participants/3
-```
-
-**Ответ `204 No Content`** — пустое тело.
-
-**Ошибки**
-
-| Код | Причина |
-|---|---|
-| `400` | Событие не найдено |
-| `400` | Статус `COMPLETED` или `CANCELLED` |
-| `400` | Пользователь не зарегистрирован |
+### `DELETE /api/events/{eventId}/participants/{userId}` — Отписаться
+**Ответ `204 No Content`.** Удаляет запись об участии.
 
 ---
 
-### `GET /api/events/{eventId}/participants` — список участников
-
-**Path params**
-
-| Параметр | Тип |
-|---|---|
-| `eventId` | long |
-
-**Пример запроса**
-
-```http
-GET /api/events/1/participants
-```
-
-**Ответ `200 OK`**
-
-```json
-[
-  { "userId": 3, "name": "Мария Сотрудник", "email": "maria@tms.local" },
-  { "userId": 5, "name": "Пётр Разработчик", "email": "petr@tms.local" }
-]
-```
-
-**Ошибки**
-
-| Код | Причина |
-|---|---|
-| `400` | Событие не найдено |
+### `GET /api/events/{eventId}/participants` — Список участников
+**Ответ `200 OK`:** Массив объектов `{ userId, name, email }`.
 
 ---
 
-## Коды ответов
+## Системные процессы (Фоновые задачи)
 
-| Код | Значение |
-|---|---|
-| `200 OK` | Успешный запрос |
-| `201 Created` | Создан ресурс (`POST /events`, `POST /participants`) |
-| `204 No Content` | Удалён ресурс (`DELETE /participants/{userId}`) |
-| `400 Bad Request` | Ошибка валидации / бизнес-логики |
-| `403 Forbidden` | Недостаточно прав (`Permission` не хватает) |
-| `500 Internal Server Error` | Непредвиденная ошибка |
-
-Тело ответа при ошибке — строка:
-
-```json
-"Только пользователь с правом EVENT_APPROVE может присвоить ASSIGNED"
-```
-
----
-
-## Жизненный цикл события
-
-```
-POST /api/events
-       │
-       ▼
-   ┌──────┐   PUT /{id}/assign (HR/ADMIN)   ┌──────────┐
-   │ NEW  │ ──────────────────────────────► │ ASSIGNED │
-   └──────┘                                 └──────────┘
-       │                                          │
-       │ PUT /{id}/cancel                         │ POST /participants
-       ▼                                          │ toTime < now (планировщик)
-  ┌───────────┐                                   ▼
-  │ CANCELLED │                              ┌───────────┐
-  └───────────┘                              │ COMPLETED │
-                                             └───────────┘
-
-При переходе в COMPLETED:
-  • rewardCoins и rewardRating начисляются всем участникам
-  • rewardsGranted = true
-  • идемпотентно: повторный запуск не задвоит
-```
+### Автоматическое завершение и начисление наград
+1. **Планировщик (`EventSchedulerService`)** просыпается каждые 30 секунд.
+2. Находит все события, где `status = ASSIGNED` и `toTime < текущего времени`.
+3. Вызывает логику завершения (`EventRewardService`):
+    - Если `paidInCoins = true`, всем участникам начисляются `rewardCoins` (в баланс) и `rewardRating` (в рейтинг).
+    - Создается запись в журнале транзакций с типом `EVENT_REWARD`.
+    - Событие переводится в статус `COMPLETED`, а флаг `rewardsGranted` становится `true` (защита от повторного начисления).

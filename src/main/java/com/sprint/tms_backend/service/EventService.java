@@ -1,5 +1,6 @@
 package com.sprint.tms_backend.service;
 
+import com.sprint.tms_backend.DTO.EventResponseDTO;
 import com.sprint.tms_backend.model.Event;
 import com.sprint.tms_backend.model.EventStatus;
 import com.sprint.tms_backend.model.Permission;
@@ -24,17 +25,17 @@ public class EventService {
     private final EventRepository eventRepository;
 
     @Transactional
-    public Event createEvent(Long organizerId,
-                             LocalDateTime fromTime,
-                             LocalDateTime toTime,
-                             String category,
-                             String nameEvent,
-                             String description,
-                             String eventPlace,
-                             String commentToAdmin,
-                             Boolean paidInCoins,
-                             BigDecimal rewardCoins,
-                             Double rewardRating) {
+    public EventResponseDTO createEvent(Long organizerId,
+                                        LocalDateTime fromTime,
+                                        LocalDateTime toTime,
+                                        String category,
+                                        String nameEvent,
+                                        String description,
+                                        String eventPlace,
+                                        String commentToAdmin,
+                                        Boolean paidInCoins,
+                                        BigDecimal rewardCoins,
+                                        Double rewardRating) {
 
         if (fromTime == null || toTime == null || !fromTime.isBefore(toTime)) {
             throw new RuntimeException("fromTime должен быть раньше toTime");
@@ -72,11 +73,11 @@ public class EventService {
             event.setRewardRating(null);
         }
 
-        return eventRepository.save(event);
+        return toDto(eventRepository.save(event));
     }
 
     @Transactional
-    public Event cancelEvent(Long id) {
+    public EventResponseDTO cancelEvent(Long id) {
         Event event = eventRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Ивент не найден"));
         if (event.getEventStatus() == EventStatus.COMPLETED) {
@@ -86,32 +87,39 @@ public class EventService {
             throw new RuntimeException("Ивент уже отменён");
         }
         event.setEventStatus(EventStatus.CANCELLED);
-        return eventRepository.save(event);
+        return toDto(eventRepository.save(event));
     }
 
     @Transactional(readOnly = true)
-    public List<Event> getAllEvents(Long actorId) {
+    public List<EventResponseDTO> getAllEvents(Long actorId) {
         User actor = resolveActor(actorId);
+        List<Event> events;
+
         if (actor == null || !actor.getRole().has(Permission.EVENT_VIEW_ANY)) {
-            return eventRepository.findByEventStatusNot(EventStatus.NEW);
+            events = eventRepository.findByEventStatusNot(EventStatus.NEW);
+        } else {
+            events = eventRepository.findAll();
         }
-        return eventRepository.findAll();
+        return events.stream().map(this::toDto).toList();
     }
 
     @Transactional(readOnly = true)
-    public List<Event> getEventsByUser(Long organizerId, Long actorId) {
+    public List<EventResponseDTO> getEventsByUser(Long organizerId, Long actorId) {
         User actor = resolveActor(actorId);
         boolean canViewAny = actor != null && actor.getRole().has(Permission.EVENT_VIEW_ANY);
         boolean isOwner = actor != null && actor.getId().equals(organizerId);
 
+        List<Event> events;
         if (canViewAny || isOwner) {
-            return eventRepository.findByOrganizerId(organizerId);
+            events = eventRepository.findByOrganizerId(organizerId);
+        } else {
+            events = eventRepository.findByOrganizerIdAndEventStatusNot(organizerId, EventStatus.NEW);
         }
-        return eventRepository.findByOrganizerIdAndEventStatusNot(organizerId, EventStatus.NEW);
+        return events.stream().map(this::toDto).toList();
     }
 
     @Transactional
-    public Event assignEvent(Long eventId, Long actorId) {
+    public EventResponseDTO assignEvent(Long eventId, Long actorId) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new RuntimeException("Ивент не найден"));
 
@@ -129,11 +137,32 @@ public class EventService {
         }
 
         event.setEventStatus(EventStatus.ASSIGNED);
-        return eventRepository.save(event);
+        return toDto(eventRepository.save(event));
     }
 
     private User resolveActor(Long actorId) {
         if (actorId == null) return null;
         return userRepository.findById(actorId).orElse(null);
+    }
+
+    // --- Маппинг Entity -> DTO ---
+    private EventResponseDTO toDto(Event event) {
+        return new EventResponseDTO(
+                event.getId(),
+                event.getOrganizer().getId(),
+                event.getOrganizer().getName(),
+                event.getFromTime(),
+                event.getToTime(),
+                event.getCategory(),
+                event.getNameEvent(),
+                event.getDescription(),
+                event.getEventPlace(),
+                event.getCommentToAdmin(),
+                event.getEventStatus(),
+                event.getPaidInCoins(),
+                event.getRewardCoins(),
+                event.getRewardRating(),
+                event.getRewardsGranted()
+        );
     }
 }

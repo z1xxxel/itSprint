@@ -9,5 +9,5 @@ public class TransferDTO {
     private Long fromUserId;
     private Long toUserId;
     private BigDecimal amount;
-
+    private String comment;
 }

@@ -1,0 +1,635 @@
+{
+  "info": {
+    "name": "TMS Backend — Auto Tests",
+    "description": "Автотесты для TMS Backend. Запускать по порядку. Папка 07 (Completion) требует ожидания ~40с — либо run all, либо вручную после паузы.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" }
+  ],
+  "item": [
+    {
+      "name": "00. Health check",
+      "item": [
+        {
+          "name": "Ping",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('App is up', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01. Users",
+      "item": [
+        {
+          "name": "Create ADMIN",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('adminEmail', 'admin-' + Date.now() + '@tms.local');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('adminId', b.id);",
+                  "pm.test('role=ADMIN', () => pm.expect(b.role).to.eql('ADMIN'));",
+                  "pm.test('password not returned', () => pm.expect(b).to.not.have.property('password'));",
+                  "pm.test('balance=10000', () => pm.expect(parseFloat(b.balance)).to.eql(10000));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Admin\",\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"admin123\",\n  \"role\": \"ADMIN\",\n  \"balance\": 10000\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        },
+        {
+          "name": "Create HR",
+          "event": [
+            { "listen": "prerequest", "script": { "exec": ["pm.collectionVariables.set('hrEmail', 'hr-' + Date.now() + '@tms.local');"] } },
+            { "listen": "test", "script": { "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.collectionVariables.set('hrId', b.id);",
+              "pm.test('role=HR', () => pm.expect(b.role).to.eql('HR'));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"HR Olga\",\n  \"email\": \"{{hrEmail}}\",\n  \"password\": \"hr12345\",\n  \"role\": \"HR\",\n  \"balance\": 1000\n}" },
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        },
+        {
+          "name": "Create ORGANIZER",
+          "event": [
+            { "listen": "prerequest", "script": { "exec": ["pm.collectionVariables.set('orgEmail', 'org-' + Date.now() + '@tms.local');"] } },
+            { "listen": "test", "script": { "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.collectionVariables.set('organizerId', b.id);",
+              "pm.test('role=ORGANIZER', () => pm.expect(b.role).to.eql('ORGANIZER'));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Ivan Organizer\",\n  \"email\": \"{{orgEmail}}\",\n  \"password\": \"ivan123\",\n  \"role\": \"ORGANIZER\",\n  \"balance\": 500\n}" },
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        },
+        {
+          "name": "Create EMPLOYEE",
+          "event": [
+            { "listen": "prerequest", "script": { "exec": ["pm.collectionVariables.set('empEmail', 'emp-' + Date.now() + '@tms.local');"] } },
+            { "listen": "test", "script": { "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.collectionVariables.set('employeeId', b.id);",
+              "pm.test('role=EMPLOYEE', () => pm.expect(b.role).to.eql('EMPLOYEE'));",
+              "pm.test('initial balance=0', () => pm.expect(parseFloat(b.balance)).to.eql(0));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Maria Employee\",\n  \"email\": \"{{empEmail}}\",\n  \"password\": \"maria123\",\n  \"role\": \"EMPLOYEE\",\n  \"balance\": 0\n}" },
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        },
+        {
+          "name": "Create MANAGER",
+          "event": [
+            { "listen": "prerequest", "script": { "exec": ["pm.collectionVariables.set('mgrEmail', 'mgr-' + Date.now() + '@tms.local');"] } },
+            { "listen": "test", "script": { "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.collectionVariables.set('managerId', b.id);",
+              "pm.test('role=MANAGER', () => pm.expect(b.role).to.eql('MANAGER'));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Petr Manager\",\n  \"email\": \"{{mgrEmail}}\",\n  \"password\": \"petr123\",\n  \"role\": \"MANAGER\",\n  \"balance\": 2000\n}" },
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        },
+        {
+          "name": "Duplicate email → 400",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('400 on duplicate', () => pm.response.to.have.status(400));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Dup\",\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"x1234567\",\n  \"role\": \"EMPLOYEE\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Events — Permissions",
+      "item": [
+        {
+          "name": "Create event (ORGANIZER)",
+          "event": [
+            { "listen": "prerequest", "script": { "exec": [
+              "const now = Date.now();",
+              "const fmt = (ms) => new Date(ms).toISOString().slice(0, 19);",
+              "pm.collectionVariables.set('fromTime', fmt(now + 3600000));",
+              "pm.collectionVariables.set('toTime', fmt(now + 7200000));"
+            ] } },
+            { "listen": "test", "script": { "exec": [
+              "pm.test('201 Created', () => pm.response.to.have.status(201));",
+              "const b = pm.response.json();",
+              "pm.collectionVariables.set('eventId', b.id);",
+              "pm.test('status=NEW', () => pm.expect(b.eventStatus).to.eql('NEW'));",
+              "pm.test('rewardsGranted=false', () => pm.expect(b.rewardsGranted).to.be.false);",
+              "pm.test('paidInCoins=true', () => pm.expect(b.paidInCoins).to.be.true);"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"organizerId\": {{organizerId}},\n  \"fromTime\": \"{{fromTime}}\",\n  \"toTime\": \"{{toTime}}\",\n  \"category\": \"IT\",\n  \"nameEvent\": \"Spring Boot Workshop\",\n  \"description\": \"Demo event\",\n  \"eventPlace\": \"Moscow\",\n  \"commentToAdmin\": \"Approve please\",\n  \"paidInCoins\": true,\n  \"rewardCoins\": 100.00,\n  \"rewardRating\": 5.0\n}" },
+            "url": { "raw": "{{baseUrl}}/api/events", "host": ["{{baseUrl}}"], "path": ["api", "events"] }
+          }
+        },
+        {
+          "name": "Assign as EMPLOYEE → 403",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('403 forbidden', () => pm.response.to.have.status(403));"
+            ] } }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"actorId\": {{employeeId}}\n}" },
+            "url": { "raw": "{{baseUrl}}/api/events/{{eventId}}/assign", "host": ["{{baseUrl}}"], "path": ["api", "events", "{{eventId}}", "assign"] }
+          }
+        },
+        {
+          "name": "Assign as ORGANIZER → 403",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('403 forbidden (ORGANIZER has no EVENT_APPROVE)', () => pm.response.to.have.status(403));"
+            ] } }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"actorId\": {{organizerId}}\n}" },
+            "url": { "raw": "{{baseUrl}}/api/events/{{eventId}}/assign", "host": ["{{baseUrl}}"], "path": ["api", "events", "{{eventId}}", "assign"] }
+          }
+        },
+        {
+          "name": "Assign as HR → 200",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('status=ASSIGNED', () => pm.expect(b.eventStatus).to.eql('ASSIGNED'));"
+            ] } }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"actorId\": {{hrId}}\n}" },
+            "url": { "raw": "{{baseUrl}}/api/events/{{eventId}}/assign", "host": ["{{baseUrl}}"], "path": ["api", "events", "{{eventId}}", "assign"] }
+          }
+        },
+        {
+          "name": "Assign again → 400",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('400 already ASSIGNED', () => pm.response.to.have.status(400));"
+            ] } }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"actorId\": {{hrId}}\n}" },
+            "url": { "raw": "{{baseUrl}}/api/events/{{eventId}}/assign", "host": ["{{baseUrl}}"], "path": ["api", "events", "{{eventId}}", "assign"] }
+          }
+        },
+        {
+          "name": "NEW event visibility — EMPLOYEE",
+          "event": [
+            { "listen": "prerequest", "script": { "exec": [
+              "// Create a second NEW event for visibility test",
+              "pm.sendRequest({",
+              "  url: pm.collectionVariables.get('baseUrl') + '/api/events',",
+              "  method: 'POST',",
+              "  header: { 'Content-Type': 'application/json' },",
+              "  body: { mode: 'raw', raw: JSON.stringify({",
+              "    organizerId: pm.collectionVariables.get('organizerId'),",
+              "    fromTime: '2026-12-01T10:00:00',",
+              "    toTime: '2026-12-01T12:00:00',",
+              "    category: 'IT', nameEvent: 'Second NEW event'",
+              "  })}",
+              "}, (err, res) => {",
+              "  if (!err && res.code === 201) pm.collectionVariables.set('newEventId', res.json().id);",
+              "});"
+            ] } },
+            { "listen": "test", "script": { "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const list = pm.response.json();",
+              "const newIds = list.filter(e => e.eventStatus === 'NEW').map(e => e.id);",
+              "pm.test('EMPLOYEE does not see NEW events', () => {",
+              "  pm.expect(newIds).to.be.an('array').that.is.empty;",
+              "});"
+            ] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/events?actorId={{employeeId}}", "host": ["{{baseUrl}}"], "path": ["api", "events"], "query": [{ "key": "actorId", "value": "{{employeeId}}" }] }
+          }
+        },
+        {
+          "name": "NEW event visibility — HR sees NEW",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const list = pm.response.json();",
+              "const hasNew = list.some(e => e.eventStatus === 'NEW');",
+              "pm.test('HR sees NEW events', () => pm.expect(hasNew).to.be.true);"
+            ] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/events?actorId={{hrId}}", "host": ["{{baseUrl}}"], "path": ["api", "events"], "query": [{ "key": "actorId", "value": "{{hrId}}" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Participants",
+      "item": [
+        {
+          "name": "Register EMPLOYEE → 201",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('201 Created', () => pm.response.to.have.status(201));",
+              "const b = pm.response.json();",
+              "pm.test('returned userId matches', () => pm.expect(b.userId).to.eql(parseInt(pm.collectionVariables.get('employeeId'))));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": {{employeeId}}\n}" },
+            "url": { "raw": "{{baseUrl}}/api/events/{{eventId}}/participants", "host": ["{{baseUrl}}"], "path": ["api", "events", "{{eventId}}", "participants"] }
+          }
+        },
+        {
+          "name": "Register again → 400",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('400 duplicate', () => pm.response.to.have.status(400));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": {{employeeId}}\n}" },
+            "url": { "raw": "{{baseUrl}}/api/events/{{eventId}}/participants", "host": ["{{baseUrl}}"], "path": ["api", "events", "{{eventId}}", "participants"] }
+          }
+        },
+        {
+          "name": "Register ORGANIZER → 400",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('400 organizer cannot join', () => pm.response.to.have.status(400));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": {{organizerId}}\n}" },
+            "url": { "raw": "{{baseUrl}}/api/events/{{eventId}}/participants", "host": ["{{baseUrl}}"], "path": ["api", "events", "{{eventId}}", "participants"] }
+          }
+        },
+        {
+          "name": "List participants → 1",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const list = pm.response.json();",
+              "pm.test('exactly 1 participant', () => pm.expect(list.length).to.eql(1));",
+              "pm.test('participant = EMPLOYEE', () => pm.expect(list[0].userId).to.eql(parseInt(pm.collectionVariables.get('employeeId'))));"
+            ] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/events/{{eventId}}/participants", "host": ["{{baseUrl}}"], "path": ["api", "events", "{{eventId}}", "participants"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. Transfers & Limits",
+      "item": [
+        {
+          "name": "Transfer 30 EMPLOYEE → MANAGER (ok)",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('type=PEER_THANKS', () => pm.expect(b.type).to.eql('PEER_THANKS'));",
+              "pm.test('comment stored', () => pm.expect(b.comment).to.eql('Thanks for the release help!'));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"fromUserId\": {{employeeId}},\n  \"toUserId\": {{managerId}},\n  \"amount\": 30.00,\n  \"comment\": \"Thanks for the release help!\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/transfers", "host": ["{{baseUrl}}"], "path": ["api", "transfers"] }
+          }
+        },
+        {
+          "name": "Transfer 30 again → 400 (per-recipient limit)",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('400 limit exceeded', () => pm.response.to.have.status(400));",
+              "pm.test('mentions limit', () => pm.expect(pm.response.text()).to.match(/лимит/i));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"fromUserId\": {{employeeId}},\n  \"toUserId\": {{managerId}},\n  \"amount\": 30.00,\n  \"comment\": \"Second\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/transfers", "host": ["{{baseUrl}}"], "path": ["api", "transfers"] }
+          }
+        },
+        {
+          "name": "Transfer to self → 400",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('400 self-transfer forbidden', () => pm.response.to.have.status(400));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"fromUserId\": {{employeeId}},\n  \"toUserId\": {{employeeId}},\n  \"amount\": 10.00,\n  \"comment\": \"self\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/transfers", "host": ["{{baseUrl}}"], "path": ["api", "transfers"] }
+          }
+        },
+        {
+          "name": "Transfer 10000 → 400 (insufficient)",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('400 insufficient funds', () => pm.response.to.have.status(400));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"fromUserId\": {{employeeId}},\n  \"toUserId\": {{adminId}},\n  \"amount\": 10000.00,\n  \"comment\": \"too much\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/transfers", "host": ["{{baseUrl}}"], "path": ["api", "transfers"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05. Grants",
+      "item": [
+        {
+          "name": "Grant as MANAGER → 200",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('type=MANAGER_BONUS', () => pm.expect(b.type).to.eql('MANAGER_BONUS'));",
+              "pm.test('fromUserId is null (emission)', () => pm.expect(b.fromUserId).to.eql(null));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"actorId\": {{managerId}},\n  \"toUserId\": {{employeeId}},\n  \"amount\": 100.00,\n  \"comment\": \"Release bonus\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/transfers/grant", "host": ["{{baseUrl}}"], "path": ["api", "transfers", "grant"] }
+          }
+        },
+        {
+          "name": "Grant as EMPLOYEE → 403",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('403 forbidden', () => pm.response.to.have.status(403));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"actorId\": {{employeeId}},\n  \"toUserId\": {{managerId}},\n  \"amount\": 10.00,\n  \"comment\": \"trying\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/transfers/grant", "host": ["{{baseUrl}}"], "path": ["api", "transfers", "grant"] }
+          }
+        },
+        {
+          "name": "Grant as ADMIN → 200",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('type=ADMIN_ADJUSTMENT', () => pm.expect(pm.response.json().type).to.eql('ADMIN_ADJUSTMENT'));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"actorId\": {{adminId}},\n  \"toUserId\": {{employeeId}},\n  \"amount\": 500.00,\n  \"comment\": \"Manual correction\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/transfers/grant", "host": ["{{baseUrl}}"], "path": ["api", "transfers", "grant"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06. History",
+      "item": [
+        {
+          "name": "GET transactions for EMPLOYEE",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "const page = pm.response.json();",
+              "pm.test('has content array', () => pm.expect(page.content).to.be.an('array'));",
+              "pm.test('has at least 3 tx', () => pm.expect(page.content.length).to.be.at.least(3));",
+              "const types = page.content.map(t => t.type);",
+              "pm.test('contains MANAGER_BONUS', () => pm.expect(types).to.include('MANAGER_BONUS'));",
+              "pm.test('contains ADMIN_ADJUSTMENT', () => pm.expect(types).to.include('ADMIN_ADJUSTMENT'));",
+              "pm.test('has comment on each', () => page.content.forEach(t => pm.expect(t.comment).to.not.be.null));"
+            ] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users/{{employeeId}}/transactions?page=0&size=20", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{employeeId}}", "transactions"], "query": [{ "key": "page", "value": "0" }, { "key": "size", "value": "20" }] }
+          }
+        },
+        {
+          "name": "Capture balance BEFORE award",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('balanceBeforeAward', pm.response.json().balance);"
+            ] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users/{{employeeId}}", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{employeeId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "07. Completion & Award (slow)",
+      "item": [
+        {
+          "name": "Create event with toTime = now+5s",
+          "event": [
+            { "listen": "prerequest", "script": { "exec": [
+              "const now = Date.now();",
+              "const fmt = (ms) => new Date(ms).toISOString().slice(0, 19);",
+              "pm.collectionVariables.set('fastFrom', fmt(now + 2000));",
+              "pm.collectionVariables.set('fastTo', fmt(now + 5000));"
+            ] } },
+            { "listen": "test", "script": { "exec": [
+              "pm.test('201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('fastEventId', pm.response.json().id);"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"organizerId\": {{organizerId}},\n  \"fromTime\": \"{{fastFrom}}\",\n  \"toTime\": \"{{fastTo}}\",\n  \"category\": \"IT\",\n  \"nameEvent\": \"Fast Completion Test\",\n  \"paidInCoins\": true,\n  \"rewardCoins\": 100.00,\n  \"rewardRating\": 5.0\n}" },
+            "url": { "raw": "{{baseUrl}}/api/events", "host": ["{{baseUrl}}"], "path": ["api", "events"] }
+          }
+        },
+        {
+          "name": "Assign fast event (HR)",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('200 ASSIGNED', () => {",
+              "  pm.response.to.have.status(200);",
+              "  pm.expect(pm.response.json().eventStatus).to.eql('ASSIGNED');",
+              "});"
+            ] } }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"actorId\": {{hrId}}\n}" },
+            "url": { "raw": "{{baseUrl}}/api/events/{{fastEventId}}/assign", "host": ["{{baseUrl}}"], "path": ["api", "events", "{{fastEventId}}", "assign"] }
+          }
+        },
+        {
+          "name": "Register EMPLOYEE on fast event",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('201 registered', () => pm.response.to.have.status(201));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": {{employeeId}}\n}" },
+            "url": { "raw": "{{baseUrl}}/api/events/{{fastEventId}}/participants", "host": ["{{baseUrl}}"], "path": ["api", "events", "{{fastEventId}}", "participants"] }
+          }
+        },
+        {
+          "name": "WAIT for scheduler (~40s)",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "// Block this test for 40s — scheduler interval is 30s",
+              "const start = Date.now();",
+              "while (Date.now() - start < 40000) { /* busy wait */ }",
+              "pm.test('waited 40s', () => pm.expect(true).to.be.true);"
+            ] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        },
+        {
+          "name": "Check: event COMPLETED, balance increased",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('200', () => pm.response.to.have.status(200));",
+              "const user = pm.response.json();",
+              "const before = parseFloat(pm.collectionVariables.get('balanceBeforeAward'));",
+              "const after = parseFloat(user.balance);",
+              "pm.test('balance increased by 100', () => pm.expect(after - before).to.eql(100));",
+              "pm.test('rating increased by 5', () => pm.expect(user.rating).to.eql(5.0));"
+            ] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users/{{employeeId}}", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{employeeId}}"] }
+          }
+        },
+        {
+          "name": "Idempotency: balance not double-awarded",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "// Wait another 40s for another scheduler cycle",
+              "const start = Date.now();",
+              "while (Date.now() - start < 40000) {}",
+              "pm.test('second wait done', () => pm.expect(true).to.be.true);"
+            ] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        },
+        {
+          "name": "Check: no double award",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('200', () => pm.response.to.have.status(200));",
+              "const user = pm.response.json();",
+              "const before = parseFloat(pm.collectionVariables.get('balanceBeforeAward'));",
+              "const after = parseFloat(user.balance);",
+              "pm.test('balance still +100 (idempotent)', () => pm.expect(after - before).to.eql(100));"
+            ] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users/{{employeeId}}", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{employeeId}}"] }
+          }
+        }
+      ]
+    }
+  ]
+}

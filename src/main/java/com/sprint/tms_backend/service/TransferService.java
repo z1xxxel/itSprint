@@ -4,10 +4,7 @@ import com.sprint.tms_backend.Exception.InsufficientFundsException;
 import com.sprint.tms_backend.Exception.InvalidTransferException;
 import com.sprint.tms_backend.Exception.UserNotFoundException;
 import com.sprint.tms_backend.config.TransferLimits;
-import com.sprint.tms_backend.model.CoinTransaction;
-import com.sprint.tms_backend.model.CoinTransactionType;
-import com.sprint.tms_backend.model.Permission;
-import com.sprint.tms_backend.model.User;
+import com.sprint.tms_backend.model.*;
 import com.sprint.tms_backend.repository.CoinTransactionRepository;
 import com.sprint.tms_backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -28,11 +25,10 @@ public class TransferService {
     private final CoinTransactionRepository coinTxRepository;
     private final TransferLimits limits;
 
-    // === Peer-to-peer перевод (сотрудник → сотруднику) ===
-
+    // === 1. Peer-to-peer перевод (сотрудник → сотруднику) ===
     @Transactional
     public CoinTransaction transferCoins(Long fromUserId, Long toUserId,
-                                         BigDecimal amount, String comment) {
+                                         BigDecimal amount, String comment, ThanksTag tag) {
 
         validateBasic(fromUserId, toUserId, amount);
 
@@ -81,11 +77,34 @@ public class TransferService {
         tx.setAmount(amount);
         tx.setType(CoinTransactionType.PEER_THANKS);
         tx.setComment(comment);
+        tx.setTag(tag); // <-- СОХРАНЯЕМ ENUM ТЕГ
         return coinTxRepository.save(tx);
     }
 
-    // === Grant: MANAGER → подчинённому, ADMIN → любому ===
+    // === 2. Списание (для магазина) ===
+    @Transactional
+    public CoinTransaction spendCoins(Long userId, BigDecimal amount, String comment) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new InvalidTransferException("Сумма списания должна быть положительной");
+        }
+        User user = lockUser(userId, "Пользователь не найден");
 
+        BigDecimal balance = safeBalance(user);
+        if (balance.compareTo(amount) < 0) {
+            throw new InsufficientFundsException("Недостаточно средств на балансе");
+        }
+        user.setBalance(balance.subtract(amount));
+
+        CoinTransaction tx = new CoinTransaction();
+        tx.setFromUserId(userId);
+        tx.setToUserId(null); // Сжигание монет
+        tx.setAmount(amount);
+        tx.setType(CoinTransactionType.PURCHASE);
+        tx.setComment(comment);
+        return coinTxRepository.save(tx);
+    }
+
+    // === 3. Grant: MANAGER → подчинённому, ADMIN → любому ===
     @Transactional
     public CoinTransaction grantCoins(Long actorId, Long toUserId,
                                       BigDecimal amount, String comment) {
@@ -114,8 +133,7 @@ public class TransferService {
             // Лимиты MANAGER
             LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
 
-            BigDecimal sentToUser = coinTxRepository.sumSentBetween(
-                    actorId, toUserId, type, startOfDay);
+            BigDecimal sentToUser = coinTxRepository.sumSentBetween(actorId, toUserId, type, startOfDay);
             if (sentToUser.add(amount).compareTo(limits.getManager().getDailyPerSubordinate()) > 0) {
                 throw new InvalidTransferException(
                         "Дневной лимит бонусов одному сотруднику: "
@@ -144,30 +162,6 @@ public class TransferService {
         tx.setComment(comment);
         log.info("{} начислил {} монет пользователю {} ({})",
                 actor.getEmail(), amount, toUserId, type);
-        return coinTxRepository.save(tx);
-    }
-
-    // === Списание (задел под каталог) ===
-
-    @Transactional
-    public CoinTransaction spendCoins(Long userId, BigDecimal amount, String comment) {
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new InvalidTransferException("Сумма списания должна быть положительной");
-        }
-        User user = lockUser(userId, "Пользователь не найден");
-
-        BigDecimal balance = safeBalance(user);
-        if (balance.compareTo(amount) < 0) {
-            throw new InsufficientFundsException("Недостаточно средств на балансе");
-        }
-        user.setBalance(balance.subtract(amount));
-
-        CoinTransaction tx = new CoinTransaction();
-        tx.setFromUserId(userId);
-        tx.setToUserId(null);   // сжигание
-        tx.setAmount(amount);
-        tx.setType(CoinTransactionType.PURCHASE);
-        tx.setComment(comment);
         return coinTxRepository.save(tx);
     }
 

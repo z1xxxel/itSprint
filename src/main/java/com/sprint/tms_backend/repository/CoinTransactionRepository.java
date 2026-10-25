@@ -39,4 +39,6 @@ public interface CoinTransactionRepository extends JpaRepository<CoinTransaction
             @Param("fromId") Long fromId,
             @Param("type") CoinTransactionType type,
             @Param("since") LocalDateTime since);
+
+    Page<CoinTransaction> findByTypeOrderByCreatedAtDesc(CoinTransactionType type, Pageable pageable);
 }

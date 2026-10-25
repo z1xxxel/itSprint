@@ -21,7 +21,8 @@ public class TransferController {
                 request.getFromUserId(),
                 request.getToUserId(),
                 request.getAmount(),
-                request.getComment()
+                request.getComment(),
+                request.getTag() // <-- Передаем тег
         );
         return ResponseEntity.ok(tx);
     }

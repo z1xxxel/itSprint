@@ -19,4 +19,7 @@ public interface EventParticipantRepository extends JpaRepository<EventParticipa
     boolean existsByEventIdAndUserId(Long eventId, Long userId);
 
     long countByEventId(Long eventId);
+
+    // Считает, на сколько событий записался пользователь (для ачивок и профиля)
+    long countByUserId(Long userId);
 }

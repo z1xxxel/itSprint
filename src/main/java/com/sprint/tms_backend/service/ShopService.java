@@ -24,15 +24,20 @@ public class ShopService {
     private final CategoryRepository categoryRepository;
     private final CoinTransactionRepository coinTransactionRepository;
 
-    // === Управление категориями ===
+    // ==========================================
+    // === УПРАВЛЕНИЕ КАТЕГОРИЯМИ ===
+    // ==========================================
+
     @Transactional
     public Category createCategory(Long actorId, CreateCategoryRequest request) {
         checkCatalogManageRights(actorId);
+
         Category category = new Category();
         category.setName(request.name());
         category.setDescription(request.description());
         category.setImageUrl(request.imageUrl());
         category.setSortOrder(request.sortOrder() != null ? request.sortOrder() : 0);
+
         return categoryRepository.save(category);
     }
 
@@ -41,7 +46,10 @@ public class ShopService {
         return categoryRepository.findAllByOrderBySortOrderAsc();
     }
 
-    // === Управление товарами ===
+    // ==========================================
+    // === УПРАВЛЕНИЕ ТОВАРАМИ ===
+    // ==========================================
+
     @Transactional
     public Product createProduct(Long actorId, CreateProductRequest request) {
         checkCatalogManageRights(actorId);
@@ -66,7 +74,7 @@ public class ShopService {
         product.setStock(request.stock());
         product.setImageUrl(request.imageUrl());
         product.setCategory(category);
-        product.setType(ProductType.PHYSICAL);
+        product.setType(ProductType.PHYSICAL); // Или брать из запроса, если нужно
 
         return productRepository.save(product);
     }
@@ -74,19 +82,25 @@ public class ShopService {
     @Transactional(readOnly = true)
     public List<ProductResponseDTO> getAllProducts() {
         return productRepository.findAll().stream()
-                .map(p -> new ProductResponseDTO(
-                        p.getId(),
-                        p.getName(),
-                        p.getDescription(),
-                        p.getPrice(),
-                        p.getStock(),
-                        p.getImageUrl(),
-                        p.getCategory() != null ? p.getCategory().getId() : null,
-                        p.getCategory() != null ? p.getCategory().getName() : "Без категории"
-                )).toList();
+                .map(this::mapToDto)
+                .toList();
     }
 
-    // === Покупка ===
+    @Transactional(readOnly = true)
+    public List<ProductResponseDTO> getProductsByCategory(Long categoryId) {
+        if (!categoryRepository.existsById(categoryId)) {
+            throw new RuntimeException("Категория не найдена");
+        }
+
+        return productRepository.findByCategoryId(categoryId).stream()
+                .map(this::mapToDto)
+                .toList();
+    }
+
+    // ==========================================
+    // === ПОКУПКА И ИСТОРИЯ ЗАКАЗОВ ===
+    // ==========================================
+
     @Transactional
     public Order purchaseProduct(PurchaseRequest request) {
         if (request.quantity() == null || request.quantity() <= 0) {
@@ -124,13 +138,15 @@ public class ShopService {
         return orderRepository.save(order);
     }
 
-    // === История заказов ===
     @Transactional(readOnly = true)
     public List<Order> getUserOrders(Long userId) {
         return orderRepository.findByUserIdOrderByCreatedAtDesc(userId);
     }
 
-    // === Управление заказами (Менеджер) ===
+    // ==========================================
+    // === УПРАВЛЕНИЕ ЗАКАЗАМИ (МЕНЕДЖЕР) ===
+    // ==========================================
+
     @Transactional(readOnly = true)
     public List<Order> getPendingOrders(Long managerId) {
         checkManagerRights(managerId);
@@ -140,6 +156,7 @@ public class ShopService {
     @Transactional
     public Order approveOrder(Long managerId, Long orderId, String comment) {
         checkManagerRights(managerId);
+
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new RuntimeException("Заказ не найден"));
 
@@ -151,12 +168,14 @@ public class ShopService {
         if (comment != null && !comment.isEmpty()) {
             order.setAdminComment(comment);
         }
+
         return orderRepository.save(order);
     }
 
     @Transactional
     public Order rejectOrder(Long managerId, Long orderId, String reason) {
         checkManagerRights(managerId);
+
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new RuntimeException("Заказ не найден"));
 
@@ -164,19 +183,19 @@ public class ShopService {
             throw new RuntimeException("Можно отклонить только заказы в статусе PENDING");
         }
 
-        // Возвращаем товар на склад
+        // 1. Возвращаем товар на склад
         Product product = productRepository.findByIdForUpdate(order.getProduct().getId())
                 .orElseThrow(() -> new RuntimeException("Товар не найден"));
         product.setStock(product.getStock() + order.getQuantity());
         productRepository.save(product);
 
-        // Возвращаем монеты
+        // 2. Возвращаем монеты
         User user = userRepository.findById(order.getUser().getId())
                 .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
         user.setBalance(user.getBalance().add(order.getTotalPrice()));
         userRepository.save(user);
 
-        // Запись в журнал
+        // 3. Запись в журнал транзакций
         CoinTransaction refundTx = new CoinTransaction();
         refundTx.setFromUserId(null);
         refundTx.setToUserId(user.getId());
@@ -185,14 +204,17 @@ public class ShopService {
         refundTx.setComment("Возврат за заказ #" + order.getId() + ". Причина: " + reason);
         coinTransactionRepository.save(refundTx);
 
+        // 4. Обновляем статус заказа
         order.setStatus(OrderStatus.REJECTED);
         order.setAdminComment(reason);
+
         return orderRepository.save(order);
     }
 
     @Transactional
     public Order completeOrder(Long managerId, Long orderId) {
         checkManagerRights(managerId);
+
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new RuntimeException("Заказ не найден"));
 
@@ -204,7 +226,10 @@ public class ShopService {
         return orderRepository.save(order);
     }
 
-    // === Проверки прав ===
+    // ==========================================
+    // === ПРОВЕРКИ ПРАВ И ХЕЛПЕРЫ ===
+    // ==========================================
+
     private void checkCatalogManageRights(Long actorId) {
         User actor = userRepository.findById(actorId)
                 .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
@@ -219,5 +244,18 @@ public class ShopService {
         if (!manager.getRole().has(Permission.ORDER_MANAGE)) {
             throw new SecurityException("Только менеджер или админ может управлять заказами");
         }
+    }
+
+    private ProductResponseDTO mapToDto(Product p) {
+        return new ProductResponseDTO(
+                p.getId(),
+                p.getName(),
+                p.getDescription(),
+                p.getPrice(),
+                p.getStock(),
+                p.getImageUrl(),
+                p.getCategory() != null ? p.getCategory().getId() : null,
+                p.getCategory() != null ? p.getCategory().getName() : "Без категории"
+        );
     }
 }

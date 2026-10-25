@@ -86,4 +86,10 @@ public class ShopController {
             @RequestParam Long actorId) {
         return ResponseEntity.ok(shopService.completeOrder(actorId, orderId));
     }
+
+    // === НОВЫЙ ЭНДПОИНТ: Товары в категории ===
+    @GetMapping("/categories/{categoryId}/products")
+    public ResponseEntity<List<ProductResponseDTO>> getProductsByCategory(@PathVariable Long categoryId) {
+        return ResponseEntity.ok(shopService.getProductsByCategory(categoryId));
+    }
 }

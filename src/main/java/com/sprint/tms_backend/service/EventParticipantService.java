@@ -21,6 +21,7 @@ public class EventParticipantService {
     private final EventRepository eventRepository;
     private final UserRepository userRepository;
     private final EventParticipantRepository participantRepository;
+    private final AchievementService achievementService;
 
     @Transactional
     public ParticipantResponseDTO register(Long eventId, Long userId) {
@@ -48,6 +49,9 @@ public class EventParticipantService {
         participant.setEvent(event);
         participant.setUser(user);
         EventParticipant saved = participantRepository.save(participant);
+
+        // Проверяем ачивки ДО return
+        achievementService.checkEventAchievements(userId);
 
         return new ParticipantResponseDTO(
                 saved.getUser().getId(),

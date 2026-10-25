@@ -30,15 +30,16 @@ public interface EventRepository extends JpaRepository<Event, Long> {
     @EntityGraph(attributePaths = {"organizer"})
     List<Event> findAll();
 
-    // Для планировщика: только id, чтобы не тянуть всё
     @Query("SELECT e.id FROM Event e " +
             "WHERE e.eventStatus = :assigned AND e.toTime < :now")
     List<Long> findIdsToComplete(
             @Param("assigned") EventStatus assigned,
             @Param("now") LocalDateTime now);
 
-    // Для начисления: блокировка строки, чтобы два потока не начислили дважды
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT e FROM Event e WHERE e.id = :id")
     Optional<Event> findByIdForUpdate(@Param("id") Long id);
+
+    // Считает, сколько событий организовал пользователь (для профиля)
+    long countByOrganizerId(Long organizerId);
 }

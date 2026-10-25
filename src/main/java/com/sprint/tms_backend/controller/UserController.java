@@ -1,6 +1,7 @@
 package com.sprint.tms_backend.controller;
 
 import com.sprint.tms_backend.DTO.CoinTransactionDTO;
+import com.sprint.tms_backend.DTO.UserProfileResponseDTO;
 import com.sprint.tms_backend.model.User;
 import com.sprint.tms_backend.repository.CoinTransactionRepository;
 import com.sprint.tms_backend.service.UserService;
@@ -52,8 +53,14 @@ public class UserController {
                         t.getAmount(),
                         t.getType(),
                         t.getComment(),
+                        t.getTag(), // <--- ПЕРЕДАЕМ ТЕГ
                         t.getCreatedAt()
                 ));
         return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/{id}/profile")
+    public ResponseEntity<UserProfileResponseDTO> getUserProfile(@PathVariable Long id) {
+        return ResponseEntity.ok(userService.getUserProfile(id));
     }
 }

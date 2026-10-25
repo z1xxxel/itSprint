@@ -41,4 +41,8 @@ public class CoinTransaction {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 30)
+    private ThanksTag tag;
 }

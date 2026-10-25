@@ -2,7 +2,6 @@ package com.sprint.tms_backend.controller;
 
 import com.sprint.tms_backend.DTO.*;
 import com.sprint.tms_backend.model.Category;
-import com.sprint.tms_backend.model.Order;
 import com.sprint.tms_backend.model.Product;
 import com.sprint.tms_backend.service.ShopService;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +31,11 @@ public class ShopController {
         return ResponseEntity.ok(shopService.getAllCategories());
     }
 
+    @GetMapping("/categories/{categoryId}/products")
+    public ResponseEntity<List<ProductResponseDTO>> getProductsByCategory(@PathVariable Long categoryId) {
+        return ResponseEntity.ok(shopService.getProductsByCategory(categoryId));
+    }
+
     // === Товары ===
     @PostMapping("/products")
     public ResponseEntity<Product> createProduct(
@@ -48,24 +52,23 @@ public class ShopController {
 
     // === Покупка и история ===
     @PostMapping("/purchase")
-    public ResponseEntity<Order> purchase(@RequestBody PurchaseRequest request) {
-        Order order = shopService.purchaseProduct(request);
-        return new ResponseEntity<>(order, HttpStatus.CREATED);
+    public ResponseEntity<OrderResponseDTO> purchase(@RequestBody PurchaseRequest request) {
+        return new ResponseEntity<>(shopService.purchaseProduct(request), HttpStatus.CREATED);
     }
 
     @GetMapping("/orders/{userId}")
-    public ResponseEntity<List<Order>> getUserOrders(@PathVariable Long userId) {
+    public ResponseEntity<List<OrderResponseDTO>> getUserOrders(@PathVariable Long userId) {
         return ResponseEntity.ok(shopService.getUserOrders(userId));
     }
 
     // === Управление заказами (Менеджер/Админ) ===
     @GetMapping("/orders/pending")
-    public ResponseEntity<List<Order>> getPendingOrders(@RequestParam Long actorId) {
+    public ResponseEntity<List<OrderResponseDTO>> getPendingOrders(@RequestParam Long actorId) {
         return ResponseEntity.ok(shopService.getPendingOrders(actorId));
     }
 
     @PutMapping("/orders/{orderId}/approve")
-    public ResponseEntity<Order> approveOrder(
+    public ResponseEntity<OrderResponseDTO> approveOrder(
             @PathVariable Long orderId,
             @RequestParam Long actorId,
             @RequestParam(required = false) String comment) {
@@ -73,7 +76,7 @@ public class ShopController {
     }
 
     @PutMapping("/orders/{orderId}/reject")
-    public ResponseEntity<Order> rejectOrder(
+    public ResponseEntity<OrderResponseDTO> rejectOrder(
             @PathVariable Long orderId,
             @RequestParam Long actorId,
             @RequestParam String reason) {
@@ -81,15 +84,9 @@ public class ShopController {
     }
 
     @PutMapping("/orders/{orderId}/complete")
-    public ResponseEntity<Order> completeOrder(
+    public ResponseEntity<OrderResponseDTO> completeOrder(
             @PathVariable Long orderId,
             @RequestParam Long actorId) {
         return ResponseEntity.ok(shopService.completeOrder(actorId, orderId));
-    }
-
-    // === НОВЫЙ ЭНДПОИНТ: Товары в категории ===
-    @GetMapping("/categories/{categoryId}/products")
-    public ResponseEntity<List<ProductResponseDTO>> getProductsByCategory(@PathVariable Long categoryId) {
-        return ResponseEntity.ok(shopService.getProductsByCategory(categoryId));
     }
 }

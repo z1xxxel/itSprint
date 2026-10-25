@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tms-postgres
+    environment:
+      POSTGRES_DB: sprint           # <-- ИЗМЕНЕНО
+      POSTGRES_USER: postgres       # <-- ИЗМЕНЕНО
+      POSTGRES_PASSWORD: qwer       # <-- ИЗМЕНЕНО
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Должно совпадать с POSTGRES_USER и POSTGRES_DB выше!
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sprint"]  # <-- ИЗМЕНЕНО
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  app:
+    build: .
+    container_name: tms-app
+    ports:
+      - "8080:8080"
+    environment:
+      # Здесь всё уже правильно, подходит под базу выше
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/sprint
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: qwer
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_SHOW_SQL: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

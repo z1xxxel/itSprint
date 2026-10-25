@@ -8,5 +8,6 @@ public enum CoinTransactionType {
     ACHIEVEMENT,
     ADMIN_ADJUSTMENT,
     REFUND,
-    SEASON_REWARD  // <--- НОВОЕ
+    SEASON_REWARD,
+    QUEST_REWARD// <--- НОВОЕ
 }

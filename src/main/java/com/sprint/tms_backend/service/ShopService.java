@@ -1,9 +1,6 @@
 package com.sprint.tms_backend.service;
 
-import com.sprint.tms_backend.DTO.CreateCategoryRequest;
-import com.sprint.tms_backend.DTO.CreateProductRequest;
-import com.sprint.tms_backend.DTO.ProductResponseDTO;
-import com.sprint.tms_backend.DTO.PurchaseRequest;
+import com.sprint.tms_backend.DTO.*;
 import com.sprint.tms_backend.model.*;
 import com.sprint.tms_backend.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -31,13 +28,11 @@ public class ShopService {
     @Transactional
     public Category createCategory(Long actorId, CreateCategoryRequest request) {
         checkCatalogManageRights(actorId);
-
         Category category = new Category();
         category.setName(request.name());
         category.setDescription(request.description());
         category.setImageUrl(request.imageUrl());
         category.setSortOrder(request.sortOrder() != null ? request.sortOrder() : 0);
-
         return categoryRepository.save(category);
     }
 
@@ -74,16 +69,14 @@ public class ShopService {
         product.setStock(request.stock());
         product.setImageUrl(request.imageUrl());
         product.setCategory(category);
-        product.setType(ProductType.PHYSICAL); // Или брать из запроса, если нужно
+        product.setType(ProductType.PHYSICAL);
 
         return productRepository.save(product);
     }
 
     @Transactional(readOnly = true)
     public List<ProductResponseDTO> getAllProducts() {
-        return productRepository.findAll().stream()
-                .map(this::mapToDto)
-                .toList();
+        return productRepository.findAll().stream().map(this::mapToDto).toList();
     }
 
     @Transactional(readOnly = true)
@@ -91,10 +84,7 @@ public class ShopService {
         if (!categoryRepository.existsById(categoryId)) {
             throw new RuntimeException("Категория не найдена");
         }
-
-        return productRepository.findByCategoryId(categoryId).stream()
-                .map(this::mapToDto)
-                .toList();
+        return productRepository.findByCategoryId(categoryId).stream().map(this::mapToDto).toList();
     }
 
     // ==========================================
@@ -102,7 +92,7 @@ public class ShopService {
     // ==========================================
 
     @Transactional
-    public Order purchaseProduct(PurchaseRequest request) {
+    public OrderResponseDTO purchaseProduct(PurchaseRequest request) {
         if (request.quantity() == null || request.quantity() <= 0) {
             throw new RuntimeException("Количество должно быть больше нуля");
         }
@@ -117,8 +107,7 @@ public class ShopService {
         BigDecimal totalPrice = product.getPrice().multiply(BigDecimal.valueOf(request.quantity()));
 
         transferService.spendCoins(
-                request.userId(),
-                totalPrice,
+                request.userId(), totalPrice,
                 "Покупка: " + product.getName() + " (x" + request.quantity() + ")"
         );
 
@@ -135,12 +124,13 @@ public class ShopService {
         order.setTotalPrice(totalPrice);
         order.setStatus(OrderStatus.PENDING);
 
-        return orderRepository.save(order);
+        return mapToOrderDto(orderRepository.save(order));
     }
 
     @Transactional(readOnly = true)
-    public List<Order> getUserOrders(Long userId) {
-        return orderRepository.findByUserIdOrderByCreatedAtDesc(userId);
+    public List<OrderResponseDTO> getUserOrders(Long userId) {
+        return orderRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
+                .map(this::mapToOrderDto).toList();
     }
 
     // ==========================================
@@ -148,13 +138,14 @@ public class ShopService {
     // ==========================================
 
     @Transactional(readOnly = true)
-    public List<Order> getPendingOrders(Long managerId) {
+    public List<OrderResponseDTO> getPendingOrders(Long managerId) {
         checkManagerRights(managerId);
-        return orderRepository.findByStatusOrderByCreatedAtAsc(OrderStatus.PENDING);
+        return orderRepository.findByStatusOrderByCreatedAtAsc(OrderStatus.PENDING).stream()
+                .map(this::mapToOrderDto).toList();
     }
 
     @Transactional
-    public Order approveOrder(Long managerId, Long orderId, String comment) {
+    public OrderResponseDTO approveOrder(Long managerId, Long orderId, String comment) {
         checkManagerRights(managerId);
 
         Order order = orderRepository.findById(orderId)
@@ -169,11 +160,11 @@ public class ShopService {
             order.setAdminComment(comment);
         }
 
-        return orderRepository.save(order);
+        return mapToOrderDto(orderRepository.save(order));
     }
 
     @Transactional
-    public Order rejectOrder(Long managerId, Long orderId, String reason) {
+    public OrderResponseDTO rejectOrder(Long managerId, Long orderId, String reason) {
         checkManagerRights(managerId);
 
         Order order = orderRepository.findById(orderId)
@@ -183,19 +174,16 @@ public class ShopService {
             throw new RuntimeException("Можно отклонить только заказы в статусе PENDING");
         }
 
-        // 1. Возвращаем товар на склад
         Product product = productRepository.findByIdForUpdate(order.getProduct().getId())
                 .orElseThrow(() -> new RuntimeException("Товар не найден"));
         product.setStock(product.getStock() + order.getQuantity());
         productRepository.save(product);
 
-        // 2. Возвращаем монеты
         User user = userRepository.findById(order.getUser().getId())
                 .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
         user.setBalance(user.getBalance().add(order.getTotalPrice()));
         userRepository.save(user);
 
-        // 3. Запись в журнал транзакций
         CoinTransaction refundTx = new CoinTransaction();
         refundTx.setFromUserId(null);
         refundTx.setToUserId(user.getId());
@@ -204,15 +192,14 @@ public class ShopService {
         refundTx.setComment("Возврат за заказ #" + order.getId() + ". Причина: " + reason);
         coinTransactionRepository.save(refundTx);
 
-        // 4. Обновляем статус заказа
         order.setStatus(OrderStatus.REJECTED);
         order.setAdminComment(reason);
 
-        return orderRepository.save(order);
+        return mapToOrderDto(orderRepository.save(order));
     }
 
     @Transactional
-    public Order completeOrder(Long managerId, Long orderId) {
+    public OrderResponseDTO completeOrder(Long managerId, Long orderId) {
         checkManagerRights(managerId);
 
         Order order = orderRepository.findById(orderId)
@@ -223,7 +210,7 @@ public class ShopService {
         }
 
         order.setStatus(OrderStatus.COMPLETED);
-        return orderRepository.save(order);
+        return mapToOrderDto(orderRepository.save(order));
     }
 
     // ==========================================
@@ -248,14 +235,24 @@ public class ShopService {
 
     private ProductResponseDTO mapToDto(Product p) {
         return new ProductResponseDTO(
-                p.getId(),
-                p.getName(),
-                p.getDescription(),
-                p.getPrice(),
-                p.getStock(),
-                p.getImageUrl(),
+                p.getId(), p.getName(), p.getDescription(), p.getPrice(), p.getStock(), p.getImageUrl(),
                 p.getCategory() != null ? p.getCategory().getId() : null,
                 p.getCategory() != null ? p.getCategory().getName() : "Без категории"
+        );
+    }
+
+    private OrderResponseDTO mapToOrderDto(Order o) {
+        return new OrderResponseDTO(
+                o.getId(),
+                o.getUser().getId(),
+                o.getUser().getName(),
+                o.getProduct().getId(),
+                o.getProduct().getName(),
+                o.getQuantity(),
+                o.getTotalPrice(),
+                o.getStatus(),
+                o.getAdminComment(),
+                o.getCreatedAt()
         );
     }
 }

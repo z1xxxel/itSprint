@@ -23,5 +23,8 @@ public enum Permission {
 
     ORDER_MANAGE,
     TICKET_MANAGE, // Управление тикетами (для SUPPORT)
-    TICKET_CREATE
+    TICKET_CREATE,
+    
+    QUEST_MANAGE,    // Создание/удаление квестов (Менеджер, HR, Админ)
+    QUEST_PARTICIPATE
 }

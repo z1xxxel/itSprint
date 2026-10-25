@@ -1,0 +1,278 @@
+{
+  "info": {
+    "name": "TMS Backend — Surveys, Seasons & Achievements",
+    "description": "Тесты для проверки опросов, ачивок и сезонного лидерборда. Генерирует уникальные данные.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" }
+  ],
+  "item": [
+    {
+      "name": "00. Setup (Create unique users)",
+      "item": [
+        {
+          "name": "Generate RunId & Create Users",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const runId = Date.now() + '_' + Math.floor(Math.random() * 1000);",
+                  "pm.collectionVariables.set('runId', runId);",
+                  "",
+                  "const createUser = (role, balance, callback) => {",
+                  "  const email = role.toLowerCase() + '_' + runId + '@test.local';",
+                  "  pm.sendRequest({",
+                  "    url: pm.collectionVariables.get('baseUrl') + '/api/users',",
+                  "    method: 'POST',",
+                  "    header: { 'Content-Type': 'application/json' },",
+                  "    body: {",
+                  "      mode: 'raw',",
+                  "      raw: JSON.stringify({",
+                  "        name: role + ' ' + runId,",
+                  "        email: email,",
+                  "        password: 'secret123',",
+                  "        role: role,",
+                  "        balance: balance",
+                  "      })",
+                  "    }",
+                  "  }, (err, res) => {",
+                  "    if (!err && res.code === 200) callback(res.json().id);",
+                  "  });",
+                  "};",
+                  "",
+                  "createUser('ADMIN', 10000, (id) => pm.collectionVariables.set('adminId', id));",
+                  "createUser('EMPLOYEE', 0, (id) => pm.collectionVariables.set('employeeId', id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01. Surveys (Опросы)",
+      "item": [
+        {
+          "name": "Create Survey",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Ставим дедлайн на завтра",
+                  "const tomorrow = new Date();",
+                  "tomorrow.setDate(tomorrow.getDate() + 1);",
+                  "pm.collectionVariables.set('deadline', tomorrow.toISOString().slice(0, 19));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('surveyId', b.id);",
+                  "pm.collectionVariables.set('questionId', b.questions[0].id);",
+                  "pm.collectionVariables.set('optionId', b.questions[0].options[0].id);",
+                  "pm.test('Survey has questions', () => pm.expect(b.questions.length).to.be.at.least(1));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"creatorId\": {{adminId}},\n  \"title\": \"Опрос {{runId}}\",\n  \"description\": \"Тестовый опрос\",\n  \"deadline\": \"{{deadline}}\",\n  \"rewardRating\": 5.0,\n  \"penaltyRating\": -1.0,\n  \"questions\": [\n    {\n      \"text\": \"Как дела?\",\n      \"options\": [\n        { \"text\": \"Отлично\", \"value\": 5 },\n        { \"text\": \"Плохо\", \"value\": 1 }\n      ]\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/surveys", "host": ["{{baseUrl}}"], "path": ["api", "surveys"] }
+          }
+        },
+        {
+          "name": "Submit Survey (Employee)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": {{employeeId}},\n  \"answers\": {\n    \"{{questionId}}\": {{optionId}}\n  }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/surveys/{{surveyId}}/submit", "host": ["{{baseUrl}}"], "path": ["api", "surveys", "{{surveyId}}", "submit"] }
+          }
+        },
+        {
+          "name": "Get Survey Stats (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('Responded users = 1', () => pm.expect(b.respondedUsers).to.eql(1));",
+                  "pm.test('Average value > 0', () => pm.expect(b.questions[0].averageValue).to.be.above(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/surveys/{{surveyId}}/stats?actorId={{adminId}}", "host": ["{{baseUrl}}"], "path": ["api", "surveys", "{{surveyId}}", "stats"], "query": [{ "key": "actorId", "value": "{{adminId}}" }] }
+          }
+        },
+        {
+          "name": "Get Detailed Responses (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('Returns array of user responses', () => pm.expect(b).to.be.an('array').that.is.not.empty);",
+                  "pm.test('Contains answers', () => pm.expect(b[0].answers).to.be.an('array').that.is.not.empty);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/surveys/{{surveyId}}/responses?actorId={{adminId}}", "host": ["{{baseUrl}}"], "path": ["api", "surveys", "{{surveyId}}", "responses"], "query": [{ "key": "actorId", "value": "{{adminId}}" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Achievements (Ачивки)",
+      "item": [
+        {
+          "name": "Grant Manual Achievement (Admin -> Employee)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"actorId\": {{adminId}},\n  \"userId\": {{employeeId}},\n  \"achievementCode\": \"BEST_EMPLOYEE\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/achievements/grant", "host": ["{{baseUrl}}"], "path": ["api", "achievements", "grant"] }
+          }
+        },
+        {
+          "name": "Check Achievement in Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('Has achievements array', () => pm.expect(b.achievements).to.be.an('array'));",
+                  "const hasBestEmployee = b.achievements.some(a => a.code === 'BEST_EMPLOYEE');",
+                  "pm.test('Has BEST_EMPLOYEE achievement', () => pm.expect(hasBestEmployee).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users/{{employeeId}}/profile", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{employeeId}}", "profile"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Seasons & Leaderboard (Сезоны)",
+      "item": [
+        {
+          "name": "Get Current Season",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('Has currentLeaderboard array', () => pm.expect(b.currentLeaderboard).to.be.an('array'));",
+                  "pm.test('Has previousSeasonResults array', () => pm.expect(b.previousSeasonResults).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/seasons/current", "host": ["{{baseUrl}}"], "path": ["api", "seasons", "current"] }
+          }
+        },
+        {
+          "name": "Check Leaderboard includes Employee",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const leaderboard = pm.response.json();",
+                  "const employeeId = parseInt(pm.collectionVariables.get('employeeId'));",
+                  "const isEmployeeInLeaderboard = leaderboard.some(entry => entry.userId === employeeId);",
+                  "pm.test('Employee is in leaderboard (has rating)', () => pm.expect(isEmployeeInLeaderboard).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/seasons/leaderboard", "host": ["{{baseUrl}}"], "path": ["api", "seasons", "leaderboard"] }
+          }
+        },
+        {
+          "name": "Check Profile currentPlace",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('Has currentPlace field', () => pm.expect(b.currentPlace).to.be.a('number'));",
+                  "pm.test('Has totalUsers field', () => pm.expect(b.totalUsers).to.be.a('number'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users/{{employeeId}}/profile", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{employeeId}}", "profile"] }
+          }
+        }
+      ]
+    }
+  ]
+}

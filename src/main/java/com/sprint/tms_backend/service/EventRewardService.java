@@ -1,10 +1,7 @@
 package com.sprint.tms_backend.service;
 
 import com.sprint.tms_backend.model.*;
-import com.sprint.tms_backend.repository.CoinTransactionRepository;
-import com.sprint.tms_backend.repository.EventParticipantRepository;
-import com.sprint.tms_backend.repository.EventRepository;
-import com.sprint.tms_backend.repository.UserRepository;
+import com.sprint.tms_backend.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,6 +19,7 @@ public class EventRewardService {
     private final EventParticipantRepository participantRepository;
     private final UserRepository userRepository;
     private final CoinTransactionRepository coinTxRepository;
+    private final RatingTransactionRepository ratingTxRepository; // <--- ДОБАВЛЕНО
 
     @Transactional
     public void completeAndAward(Long eventId) {
@@ -32,7 +30,6 @@ public class EventRewardService {
             return;
         }
 
-        // Идемпотентность
         if (Boolean.TRUE.equals(event.getRewardsGranted())) {
             event.setEventStatus(EventStatus.COMPLETED);
             eventRepository.save(event);
@@ -45,22 +42,28 @@ public class EventRewardService {
 
             for (EventParticipant p : participants) {
                 User user = p.getUser();
-                BigDecimal currentBalance = user.getBalance() != null
-                        ? user.getBalance() : BigDecimal.ZERO;
+                BigDecimal currentBalance = user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO;
 
                 if (event.getRewardCoins() != null) {
                     user.setBalance(currentBalance.add(event.getRewardCoins()));
                 }
+
                 if (event.getRewardRating() != null) {
                     double currentRating = user.getRating() != null ? user.getRating() : 0.0;
                     user.setRating(currentRating + event.getRewardRating());
+
+                    // ЛОГИРУЕМ ИСТОРИЮ РЕЙТИНГА
+                    RatingTransaction rt = new RatingTransaction();
+                    rt.setUserId(user.getId());
+                    rt.setAmount(event.getRewardRating());
+                    rt.setReason("Награда за событие #" + event.getId() + ": " + event.getNameEvent());
+                    ratingTxRepository.save(rt);
                 }
                 userRepository.save(user);
 
-                // Запись в журнал
                 if (event.getRewardCoins() != null) {
                     CoinTransaction tx = new CoinTransaction();
-                    tx.setFromUserId(null);  // эмиссия
+                    tx.setFromUserId(null);
                     tx.setToUserId(user.getId());
                     tx.setAmount(event.getRewardCoins());
                     tx.setType(CoinTransactionType.EVENT_REWARD);
@@ -68,8 +71,7 @@ public class EventRewardService {
                     coinTxRepository.save(tx);
                 }
             }
-            log.info("Событие {} завершено. Награда выдана {} участникам",
-                    eventId, participants.size());
+            log.info("Событие {} завершено. Награда выдана {} участникам", eventId, participants.size());
         }
 
         event.setEventStatus(EventStatus.COMPLETED);

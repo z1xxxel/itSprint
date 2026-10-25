@@ -18,6 +18,7 @@ public class EventSchedulerService {
     private final EventRepository eventRepository;
     private final EventRewardService rewardService;
     private final SurveyService surveyService;
+    private final SeasonService seasonService;
 
     // Раз в 30 секунд проверяем события
     @Scheduled(fixedRate = 30_000)
@@ -46,6 +47,15 @@ public class EventSchedulerService {
             surveyService.applyPenaltiesForExpiredSurveys();
         } catch (Exception e) {
             log.error("Ошибка при начислении штрафов за опросы", e);
+        }
+    }
+
+    @Scheduled(fixedRate = 3_600_000) // раз в час
+    public void checkExpiredSeasons() {
+        try {
+            seasonService.closeExpiredSeasons();
+        } catch (Exception e) {
+            log.error("Ошибка при закрытии сезонов", e);
         }
     }
 }

@@ -21,5 +21,7 @@ public enum Permission {
     USER_MANAGE,
     ROLE_ASSIGN,
 
-    ORDER_MANAGE, // Управление заказами (подтверждение/отклонение)
+    ORDER_MANAGE,
+    TICKET_MANAGE, // Управление тикетами (для SUPPORT)
+    TICKET_CREATE
 }

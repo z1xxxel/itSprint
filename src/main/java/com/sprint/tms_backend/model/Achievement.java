@@ -32,4 +32,11 @@ public class Achievement {
     // НОВОЕ ПОЛЕ: Сколько монет дается за ачивку (0 или null = без монет)
     @Column(precision = 19, scale = 2)
     private BigDecimal rewardCoins = BigDecimal.ZERO;
+
+    // Группировка для UI (например, "EVENT_JOINER" для всех уровней "Участника")
+    @Column(name = "group_code")
+    private String groupCode;
+
+    // Уровень (1, 2, 3...)
+    private Integer level;
 }

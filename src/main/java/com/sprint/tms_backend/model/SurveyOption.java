@@ -1,7 +1,10 @@
 package com.sprint.tms_backend.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 
 @Entity
 @Table(name = "survey_options")
@@ -14,11 +17,14 @@ public class SurveyOption {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "question_id", nullable = false)
+    @JsonIgnore
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private SurveyQuestion question;
 
     @Column(nullable = false)
-    private String text; // Текст варианта (например, "5 - Отлично")
+    private String text;
 
     @Column(nullable = false)
-    private Integer value; // Числовое значение (1, 2, 3, 4, 5)
+    private Integer value;
 }

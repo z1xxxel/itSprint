@@ -15,12 +15,28 @@ public record UserProfileResponseDTO(
         Double rating,
         String level,
 
+        // Место в общем рейтинге
+        Integer currentPlace,
+        Long totalUsers,
+
+        // Информация о подразделении
+        Long departmentId,        // <--- ДОБАВЛЕНО
+        String departmentName,    // <--- ДОБАВЛЕНО
+        Integer departmentPlace,  // <--- ДОБАВЛЕНО
+
+        // Статистика
         long organizedEventsCount,
         long participatedEventsCount,
 
-        List<CoinTransactionDTO> recentTransactions,
+        // История (для графиков и блока последних изменений)
+        List<RatingTransactionDTO> recentRatingTransactions,
+        List<CoinTransactionDTO> recentBalanceTransactions,
+
+        // Последние заказы
         List<OrderShortDTO> recentOrders,
-        List<AchievementResponseDTO> achievements // <--- ТЕПЕРЬ ВНУТРИ
+
+        // Сгруппированные ачивки
+        List<AchievementProfileDTO> achievements
 ) {
     public record OrderShortDTO(
             Long orderId,

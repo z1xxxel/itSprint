@@ -10,6 +10,7 @@ public enum UserRole {
             Permission.EVENT_CREATE,
             Permission.EVENT_EDIT_OWN,
             Permission.COIN_TRANSFER,
+            Permission.TICKET_CREATE,
             Permission.CATALOG_VIEW
     )),
 
@@ -29,6 +30,13 @@ public enum UserRole {
             Permission.CATALOG_VIEW,
             Permission.CATALOG_MANAGE,
             Permission.ORDER_MANAGE  // Управление заказами (подтверждение/отклонение)
+    )),
+
+    SUPPORT(EnumSet.of(
+            Permission.TICKET_MANAGE,
+            Permission.TICKET_CREATE,
+            Permission.COIN_TRANSFER,
+            Permission.CATALOG_VIEW
     )),
 
     HR(EnumSet.of(

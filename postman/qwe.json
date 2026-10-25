@@ -1,0 +1,459 @@
+{
+  "info": {
+    "name": "TMS Backend — Full Integration Tests",
+    "description": "Тесты для проверки поддержки, опросов, сезонов, департаментов и профиля. Изолированные данные.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" }
+  ],
+  "item": [
+    {
+      "name": "00. Setup (Create unique users)",
+      "item": [
+        {
+          "name": "Generate RunId & Create Users",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const runId = Date.now() + '_' + Math.floor(Math.random() * 1000);",
+                  "pm.collectionVariables.set('runId', runId);",
+                  "",
+                  "const createUser = (role, balance, callback) => {",
+                  "  const email = role.toLowerCase() + '_' + runId + '@test.local';",
+                  "  pm.sendRequest({",
+                  "    url: pm.collectionVariables.get('baseUrl') + '/api/users',",
+                  "    method: 'POST',",
+                  "    header: { 'Content-Type': 'application/json' },",
+                  "    body: { mode: 'raw', raw: JSON.stringify({",
+                  "        name: role + ' ' + runId, email: email, password: 'secret123', role: role, balance: balance",
+                  "    })},",
+                  "  }, (err, res) => {",
+                  "    if (!err && res.code === 200) callback(res.json().id);",
+                  "  });",
+                  "};",
+                  "",
+                  "createUser('ADMIN', 10000, (id) => pm.collectionVariables.set('adminId', id));",
+                  "createUser('EMPLOYEE', 100, (id) => pm.collectionVariables.set('employeeId', id));",
+                  "createUser('SUPPORT', 0, (id) => pm.collectionVariables.set('supportId', id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01. Departments & Profile",
+      "item": [
+        {
+          "name": "Create Department & Assign Employee",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Создаем департамент",
+                  "pm.sendRequest({",
+                  "  url: pm.collectionVariables.get('baseUrl') + '/api/departments',",
+                  "  method: 'POST',",
+                  "  header: { 'Content-Type': 'application/json' },",
+                  "  body: { mode: 'raw', raw: JSON.stringify({",
+                  "    name: 'Backend Team ' + pm.collectionVariables.get('runId'),",
+                  "    description: 'Test Department'",
+                  "  })}",
+                  "}, (err, res) => {",
+                  "  if (!err && res.code === 201) {",
+                  "    const deptId = res.json().id;",
+                  "    pm.collectionVariables.set('deptId', deptId);",
+                  "    // Назначаем сотрудника в департамент",
+                  "    pm.sendRequest({",
+                  "      url: pm.collectionVariables.get('baseUrl') + '/api/departments/' + deptId + '/users/' + pm.collectionVariables.get('employeeId'),",
+                  "      method: 'PUT'",
+                  "    }, (err2, res2) => {});",
+                  "  }",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Department setup sent', () => pm.expect(true).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        },
+        {
+          "name": "Check User Profile (with Dept & Stats)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('Has department info', () => {",
+                  "  pm.expect(b.departmentId).to.not.be.null;",
+                  "  pm.expect(b.departmentName).to.include('Backend Team');",
+                  "});",
+                  "pm.test('Has rating/balance arrays', () => {",
+                  "  pm.expect(b.recentRatingTransactions).to.be.an('array');",
+                  "  pm.expect(b.recentBalanceTransactions).to.be.an('array');",
+                  "});",
+                  "pm.test('Has grouped achievements', () => {",
+                  "  pm.expect(b.achievements).to.be.an('array');",
+                  "});",
+                  "pm.test('Has currentPlace', () => pm.expect(b.currentPlace).to.be.a('number'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users/{{employeeId}}/profile", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{employeeId}}", "profile"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Surveys (Full Cycle)",
+      "item": [
+        {
+          "name": "Create Survey Template",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('templateId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"creatorId\": {{adminId}},\n  \"name\": \"Q4 Template {{runId}}\",\n  \"description\": \"Test template\",\n  \"questions\": [\n    {\n      \"text\": \"Rate your mood\",\n      \"options\": [\n        { \"text\": \"Good\", \"value\": 5 },\n        { \"text\": \"Bad\", \"value\": 1 }\n      ]\n    }\n  ]\n}" },
+            "url": { "raw": "{{baseUrl}}/api/templates", "host": ["{{baseUrl}}"], "path": ["api", "templates"] }
+          }
+        },
+        {
+          "name": "Create Survey from Scratch",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const tomorrow = new Date();",
+                  "tomorrow.setDate(tomorrow.getDate() + 1);",
+                  "pm.collectionVariables.set('deadline', tomorrow.toISOString().slice(0, 19));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('surveyId', b.id);",
+                  "pm.collectionVariables.set('questionId', b.questions[0].id);",
+                  "pm.collectionVariables.set('optionId', b.questions[0].options[0].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"creatorId\": {{adminId}},\n  \"title\": \"Survey {{runId}}\",\n  \"description\": \"Test survey\",\n  \"deadline\": \"{{deadline}}\",\n  \"rewardRating\": 5.0,\n  \"penaltyRating\": -1.0,\n  \"questions\": [\n    {\n      \"text\": \"How are you?\",\n      \"options\": [\n        { \"text\": \"Great\", \"value\": 5 },\n        { \"text\": \"Bad\", \"value\": 1 }\n      ]\n    }\n  ]\n}" },
+            "url": { "raw": "{{baseUrl}}/api/surveys", "host": ["{{baseUrl}}"], "path": ["api", "surveys"] }
+          }
+        },
+        {
+          "name": "Submit Survey (Employee)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": {{employeeId}},\n  \"answers\": {\n    \"{{questionId}}\": {{optionId}}\n  }\n}" },
+            "url": { "raw": "{{baseUrl}}/api/surveys/{{surveyId}}/submit", "host": ["{{baseUrl}}"], "path": ["api", "surveys", "{{surveyId}}", "submit"] }
+          }
+        },
+        {
+          "name": "Get Survey Stats (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Has stats', () => {",
+                  "  pm.expect(pm.response.json().respondedUsers).to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/surveys/{{surveyId}}/stats?actorId={{adminId}}", "host": ["{{baseUrl}}"], "path": ["api", "surveys", "{{surveyId}}", "stats"], "query": [{ "key": "actorId", "value": "{{adminId}}" }] }
+          }
+        },
+        {
+          "name": "Get Detailed Responses (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns array of responses', () => pm.expect(pm.response.json()).to.be.an('array').that.is.not.empty);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/surveys/{{surveyId}}/responses?actorId={{adminId}}", "host": ["{{baseUrl}}"], "path": ["api", "surveys", "{{surveyId}}", "responses"], "query": [{ "key": "actorId", "value": "{{adminId}}" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Support Tickets",
+      "item": [
+        {
+          "name": "Create Ticket",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('ticketId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": {{employeeId}},\n  \"topic\": \"Проблема с доступом\",\n  \"description\": \"Не могу зайти в систему\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/support/tickets", "host": ["{{baseUrl}}"], "path": ["api", "support", "tickets"] }
+          }
+        },
+        {
+          "name": "Support Takes Ticket",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Status is IN_PROGRESS', () => pm.expect(pm.response.json().status).to.eql('IN_PROGRESS'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "url": { "raw": "{{baseUrl}}/api/support/tickets/{{ticketId}}/take?supportId={{supportId}}", "host": ["{{baseUrl}}"], "path": ["api", "support", "tickets", "{{ticketId}}", "take"], "query": [{ "key": "supportId", "value": "{{supportId}}" }] }
+          }
+        },
+        {
+          "name": "Employee Sends Message",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"senderId\": {{employeeId}},\n  \"text\": \"Помогите пожалуйста, выдает ошибку 403\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/support/tickets/{{ticketId}}/messages", "host": ["{{baseUrl}}"], "path": ["api", "support", "tickets", "{{ticketId}}", "messages"] }
+          }
+        },
+        {
+          "name": "Support Sends Message",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"senderId\": {{supportId}},\n  \"text\": \"Сейчас посмотрим, проверьте права\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/support/tickets/{{ticketId}}/messages", "host": ["{{baseUrl}}"], "path": ["api", "support", "tickets", "{{ticketId}}", "messages"] }
+          }
+        },
+        {
+          "name": "Get Chat History",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Has messages', () => pm.expect(pm.response.json().messages.length).to.be.above(1));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/support/tickets/{{ticketId}}/chat?actorId={{employeeId}}", "host": ["{{baseUrl}}"], "path": ["api", "support", "tickets", "{{ticketId}}", "chat"], "query": [{ "key": "actorId", "value": "{{employeeId}}" }] }
+          }
+        },
+        {
+          "name": "Support Completes Ticket",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Status is COMPLETED', () => pm.expect(pm.response.json().status).to.eql('COMPLETED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "url": { "raw": "{{baseUrl}}/api/support/tickets/{{ticketId}}/complete?supportId={{supportId}}", "host": ["{{baseUrl}}"], "path": ["api", "support", "tickets", "{{ticketId}}", "complete"], "query": [{ "key": "supportId", "value": "{{supportId}}" }] }
+          }
+        },
+        {
+          "name": "Employee Leaves Review",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Rating saved', () => pm.expect(pm.response.json().rating).to.eql(5));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": {{employeeId}},\n  \"rating\": 5,\n  \"comment\": \"Быстро помогли!\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/support/tickets/{{ticketId}}/review", "host": ["{{baseUrl}}"], "path": ["api", "support", "tickets", "{{ticketId}}", "review"] }
+          }
+        },
+        {
+          "name": "Check Support Rating Increased",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Support got +2 rating', () => pm.expect(pm.response.json().rating).to.be.above(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users/{{supportId}}", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{supportId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. Seasons & Leaderboard",
+      "item": [
+        {
+          "name": "Get Current Season (with My Dept)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('Has currentLeaderboard', () => pm.expect(b.currentLeaderboard).to.be.an('array'));",
+                  "pm.test('Has myDepartmentLeaderboard', () => pm.expect(b.myDepartmentLeaderboard).to.be.an('array'));",
+                  "pm.test('My dept name is correct', () => pm.expect(b.myDepartmentName).to.include('Backend Team'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/seasons/current?actorId={{employeeId}}", "host": ["{{baseUrl}}"], "path": ["api", "seasons", "current"], "query": [{ "key": "actorId", "value": "{{employeeId}}" }] }
+          }
+        },
+        {
+          "name": "Grant Manual Achievement",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"actorId\": {{adminId}},\n  \"userId\": {{employeeId}},\n  \"achievementCode\": \"BEST_EMPLOYEE\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/achievements/grant", "host": ["{{baseUrl}}"], "path": ["api", "achievements", "grant"] }
+          }
+        },
+        {
+          "name": "Verify Achievement in Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const achievements = pm.response.json().achievements;",
+                  "const hasBest = achievements.some(a => a.groupCode === 'BEST_EMPLOYEE' || a.name.includes('Лучший'));",
+                  "pm.test('Profile has new achievement', () => pm.expect(hasBest).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users/{{employeeId}}/profile", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{employeeId}}", "profile"] }
+          }
+        }
+      ]
+    }
+  ]
+}

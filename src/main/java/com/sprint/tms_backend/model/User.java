@@ -1,5 +1,6 @@
 package com.sprint.tms_backend.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -37,4 +38,10 @@ public class User {
 
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal balance = BigDecimal.ZERO;
+
+    // ПОЛНОСТЬЮ ИСКЛЮЧАЕМ ИЗ JSON, ЧТОБЫ JACKSON НЕ ЛЕЗ В БАЗУ
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "department_id")
+    @JsonIgnore
+    private Department department;
 }

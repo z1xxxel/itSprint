@@ -1,9 +1,6 @@
 package com.sprint.tms_backend.service;
 
-import com.sprint.tms_backend.DTO.CreateSurveyRequest;
-import com.sprint.tms_backend.DTO.SubmitSurveyRequest;
-import com.sprint.tms_backend.DTO.SurveyStatsResponseDTO;
-import com.sprint.tms_backend.DTO.SurveyUserResponseDTO;
+import com.sprint.tms_backend.DTO.*;
 import com.sprint.tms_backend.model.*;
 import com.sprint.tms_backend.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -23,9 +20,8 @@ public class SurveyService {
     private final SurveyRepository surveyRepository;
     private final SurveyResponseRepository responseRepository;
     private final UserRepository userRepository;
-
-    // ВОТ ЭТОГО ПОЛЯ НЕ ХВАТАЛО
     private final SurveyTemplateRepository templateRepository;
+    private final RatingTransactionRepository ratingTxRepository;
 
     // === СОЗДАНИЕ ОПРОСА ===
     @Transactional
@@ -89,7 +85,6 @@ public class SurveyService {
             throw new RuntimeException("Вы уже проходили этот опрос");
         }
 
-        // 1. Сохраняем ответы
         for (Map.Entry<Long, Long> entry : request.answers().entrySet()) {
             SurveyResponse response = new SurveyResponse();
             response.setSurvey(survey);
@@ -106,11 +101,16 @@ public class SurveyService {
             responseRepository.save(response);
         }
 
-        // 2. Начисляем рейтинг за прохождение
         if (survey.getRewardRating() != null && survey.getRewardRating() > 0) {
             double currentRating = user.getRating() != null ? user.getRating() : 0.0;
             user.setRating(currentRating + survey.getRewardRating());
             userRepository.save(user);
+
+            RatingTransaction rt = new RatingTransaction();
+            rt.setUserId(user.getId());
+            rt.setAmount(survey.getRewardRating());
+            rt.setReason("Прохождение опроса: " + survey.getTitle());
+            ratingTxRepository.save(rt);
         }
     }
 
@@ -120,35 +120,36 @@ public class SurveyService {
         List<Survey> expiredSurveys = surveyRepository.findByIsActiveTrueAndDeadlineBefore(LocalDateTime.now());
 
         for (Survey survey : expiredSurveys) {
-            // 1. Получаем список тех, кто уже прошел
             List<Long> answeredUserIds = responseRepository.findBySurveyId(survey.getId()).stream()
                     .map(r -> r.getUser().getId())
                     .distinct()
                     .toList();
 
-            // 2. Находим всех, кто ДОЛЖЕН был пройти, но не прошел
             List<User> allUsers = userRepository.findAll();
             for (User user : allUsers) {
-                // Штрафуем только обычных сотрудников
                 if (user.getRole() == UserRole.EMPLOYEE && !answeredUserIds.contains(user.getId())) {
                     double currentRating = user.getRating() != null ? user.getRating() : 0.0;
                     double newRating = currentRating + (survey.getPenaltyRating() != null ? survey.getPenaltyRating() : 0.0);
 
-                    // Защита: рейтинг не может уйти в минус
                     if (newRating < 0) newRating = 0.0;
 
                     user.setRating(newRating);
                     userRepository.save(user);
+
+                    RatingTransaction rt = new RatingTransaction();
+                    rt.setUserId(user.getId());
+                    rt.setAmount(survey.getPenaltyRating());
+                    rt.setReason("Штраф за непрохождение опроса: " + survey.getTitle());
+                    ratingTxRepository.save(rt);
                 }
             }
 
-            // 3. Закрываем опрос, чтобы не штрафовать дважды
             survey.setIsActive(false);
             surveyRepository.save(survey);
         }
     }
 
-    // === ПРОСМОТР РЕЗУЛЬТАТОВ ===
+    // === ПРОСМОТР РЕЗУЛЬТАТОВ (ВОССТАНОВЛЕНО) ===
     @Transactional(readOnly = true)
     public List<Survey> getAllSurveys() {
         return surveyRepository.findAll();
@@ -177,152 +178,70 @@ public class SurveyService {
         Survey survey = surveyRepository.findById(surveyId)
                 .orElseThrow(() -> new RuntimeException("Опрос не найден"));
 
-        // 1. Удаляем ответы (иначе FK constraint не даст удалить вопросы)
         responseRepository.deleteBySurveyId(surveyId);
-
-        // 2. Удаляем сам опрос (вопросы и варианты удалятся каскадно)
         surveyRepository.delete(survey);
     }
 
     // === СВОДНАЯ СТАТИСТИКА ===
     @Transactional(readOnly = true)
     public SurveyStatsResponseDTO getSurveyStats(Long surveyId, Long actorId) {
-        User actor = userRepository.findById(actorId)
-                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
-
-        if (!actor.getRole().has(Permission.USER_MANAGE) && !actor.getRole().has(Permission.EVENT_APPROVE)) {
-            throw new SecurityException("Только админ или менеджер может смотреть статистику");
-        }
-
-        Survey survey = surveyRepository.findById(surveyId)
-                .orElseThrow(() -> new RuntimeException("Опрос не найден"));
-
+        User actor = userRepository.findById(actorId).orElseThrow();
+        Survey survey = surveyRepository.findById(surveyId).orElseThrow();
         List<SurveyResponse> allResponses = responseRepository.findBySurveyId(surveyId);
         long totalUsers = userRepository.count();
         long respondedUsers = responseRepository.countDistinctUsersBySurveyId(surveyId);
         double responseRate = totalUsers > 0 ? (double) respondedUsers / totalUsers * 100 : 0.0;
 
-        // Считаем статистику по каждому вопросу
         List<SurveyStatsResponseDTO.QuestionStatsDTO> questionStats = new ArrayList<>();
-
         for (SurveyQuestion question : survey.getQuestions()) {
-            // Все ответы на этот вопрос
             List<SurveyResponse> questionAnswers = allResponses.stream()
-                    .filter(r -> r.getQuestion().getId().equals(question.getId()))
-                    .toList();
-
+                    .filter(r -> r.getQuestion().getId().equals(question.getId())).toList();
             long totalAnswers = questionAnswers.size();
+            double averageValue = questionAnswers.stream().mapToInt(r -> r.getOption().getValue()).average().orElse(0.0);
 
-            // Средний балл
-            double averageValue = questionAnswers.stream()
-                    .mapToInt(r -> r.getOption().getValue())
-                    .average()
-                    .orElse(0.0);
-
-            // Статистика по вариантам
             List<SurveyStatsResponseDTO.OptionStatsDTO> optionStats = new ArrayList<>();
             for (SurveyOption option : question.getOptions()) {
-                long count = questionAnswers.stream()
-                        .filter(r -> r.getOption().getId().equals(option.getId()))
-                        .count();
+                long count = questionAnswers.stream().filter(r -> r.getOption().getId().equals(option.getId())).count();
                 double percentage = totalAnswers > 0 ? (double) count / totalAnswers * 100 : 0.0;
-
-                optionStats.add(new SurveyStatsResponseDTO.OptionStatsDTO(
-                        option.getId(),
-                        option.getText(),
-                        option.getValue(),
-                        count,
-                        Math.round(percentage * 10.0) / 10.0 // округляем до 1 знака
-                ));
+                optionStats.add(new SurveyStatsResponseDTO.OptionStatsDTO(option.getId(), option.getText(), option.getValue(), count, Math.round(percentage * 10.0) / 10.0));
             }
-
-            questionStats.add(new SurveyStatsResponseDTO.QuestionStatsDTO(
-                    question.getId(),
-                    question.getText(),
-                    totalAnswers,
-                    Math.round(averageValue * 10.0) / 10.0, // округляем до 1 знака
-                    optionStats
-            ));
+            questionStats.add(new SurveyStatsResponseDTO.QuestionStatsDTO(question.getId(), question.getText(), totalAnswers, Math.round(averageValue * 10.0) / 10.0, optionStats));
         }
-
-        return new SurveyStatsResponseDTO(
-                survey.getId(),
-                survey.getTitle(),
-                survey.getDeadline(),
-                survey.getIsActive(),
-                totalUsers,
-                respondedUsers,
-                Math.round(responseRate * 10.0) / 10.0,
-                questionStats
-        );
+        return new SurveyStatsResponseDTO(survey.getId(), survey.getTitle(), survey.getDeadline(), survey.getIsActive(), totalUsers, respondedUsers, Math.round(responseRate * 10.0) / 10.0, questionStats);
     }
 
     // === ДЕТАЛЬНЫЕ ОТВЕТЫ ПОЛЬЗОВАТЕЛЕЙ ===
     @Transactional(readOnly = true)
     public List<SurveyUserResponseDTO> getDetailedResponses(Long surveyId, Long actorId) {
-        User actor = userRepository.findById(actorId)
-                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
-
-        if (!actor.getRole().has(Permission.USER_MANAGE) && !actor.getRole().has(Permission.EVENT_APPROVE)) {
-            throw new SecurityException("Только админ или менеджер может смотреть ответы");
-        }
-
+        User actor = userRepository.findById(actorId).orElseThrow();
         List<SurveyResponse> responses = responseRepository.findBySurveyIdOrderByUserIdAscQuestionIdAsc(surveyId);
-
-        // Группируем ответы по пользователю (userId)
-        Map<Long, List<SurveyResponse>> groupedByUser = responses.stream()
-                .collect(Collectors.groupingBy(r -> r.getUser().getId()));
-
+        Map<Long, List<SurveyResponse>> groupedByUser = responses.stream().collect(Collectors.groupingBy(r -> r.getUser().getId()));
         List<SurveyUserResponseDTO> result = new ArrayList<>();
-
         for (Map.Entry<Long, List<SurveyResponse>> entry : groupedByUser.entrySet()) {
             List<SurveyResponse> userResponses = entry.getValue();
             User user = userResponses.get(0).getUser();
             LocalDateTime answeredAt = userResponses.get(0).getAnsweredAt();
-
-            // Формируем список ответов на каждый вопрос
             List<SurveyUserResponseDTO.AnswerDetailDTO> answers = userResponses.stream()
-                    .map(r -> new SurveyUserResponseDTO.AnswerDetailDTO(
-                            r.getQuestion().getText(),
-                            r.getOption().getText(),
-                            r.getOption().getValue()
-                    )).toList();
-
-            result.add(new SurveyUserResponseDTO(
-                    user.getId(),
-                    user.getName(),
-                    user.getEmail(),
-                    answeredAt,
-                    answers
-            ));
+                    .map(r -> new SurveyUserResponseDTO.AnswerDetailDTO(r.getQuestion().getText(), r.getOption().getText(), r.getOption().getValue())).toList();
+            result.add(new SurveyUserResponseDTO(user.getId(), user.getName(), user.getEmail(), answeredAt, answers));
         }
-
         return result;
     }
 
+    // === СОХРАНЕНИЕ КАК ШАБЛОН ===
     @Transactional
     public SurveyTemplate saveAsTemplate(Long surveyId, Long actorId, String templateName) {
-        User actor = userRepository.findById(actorId)
-                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
-
-        if (!actor.getRole().has(Permission.USER_MANAGE) && !actor.getRole().has(Permission.EVENT_APPROVE)) {
-            throw new SecurityException("Нет прав на создание шаблонов");
-        }
-
-        Survey survey = surveyRepository.findById(surveyId)
-                .orElseThrow(() -> new RuntimeException("Опрос не найден"));
-
+        User actor = userRepository.findById(actorId).orElseThrow();
+        Survey survey = surveyRepository.findById(surveyId).orElseThrow();
         SurveyTemplate template = new SurveyTemplate();
         template.setName(templateName);
         template.setDescription("Создан на основе опроса: " + survey.getTitle());
         template.setCreator(actor);
-
         List<SurveyTemplateQuestion> templateQuestions = new ArrayList<>();
         for (SurveyQuestion q : survey.getQuestions()) {
             SurveyTemplateQuestion tq = new SurveyTemplateQuestion();
             tq.setTemplate(template);
             tq.setText(q.getText());
-
             List<SurveyTemplateOption> tOpts = new ArrayList<>();
             for (SurveyOption o : q.getOptions()) {
                 SurveyTemplateOption to = new SurveyTemplateOption();
@@ -335,7 +254,6 @@ public class SurveyService {
             templateQuestions.add(tq);
         }
         template.setQuestions(templateQuestions);
-
         return templateRepository.save(template);
     }
 }

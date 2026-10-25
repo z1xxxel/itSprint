@@ -1,7 +1,10 @@
 package com.sprint.tms_backend.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 
 @Entity
 @Table(name = "survey_template_options")
@@ -14,6 +17,9 @@ public class SurveyTemplateOption {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "question_id", nullable = false)
+    @JsonIgnore
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private SurveyTemplateQuestion question;
 
     @Column(nullable = false)

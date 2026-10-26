@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
@@ -88,5 +89,63 @@ public class ShopController {
             @PathVariable Long orderId,
             @RequestParam Long actorId) {
         return ResponseEntity.ok(shopService.completeOrder(actorId, orderId));
+    }
+
+    // Поиск
+    @GetMapping("/products/search")
+    public ResponseEntity<List<ProductResponseDTO>> search(
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) BigDecimal minPrice,
+            @RequestParam(required = false) BigDecimal maxPrice,
+            @RequestParam(defaultValue = "name") String sortBy,
+            @RequestParam(defaultValue = "asc") String sortDir) {
+        return ResponseEntity.ok(shopService.searchProducts(query, categoryId, minPrice, maxPrice, sortBy, sortDir));
+    }
+
+    // Избранное
+    @PostMapping("/favorites/{productId}")
+    public ResponseEntity<String> addFavorite(@PathVariable Long productId, @RequestParam Long userId) {
+        shopService.addFavorite(userId, productId);
+        return ResponseEntity.ok("Добавлено в избранное");
+    }
+
+    @DeleteMapping("/favorites/{productId}")
+    public ResponseEntity<String> removeFavorite(@PathVariable Long productId, @RequestParam Long userId) {
+        shopService.removeFavorite(userId, productId);
+        return ResponseEntity.ok("Удалено из избранного");
+    }
+
+    @GetMapping("/favorites")
+    public ResponseEntity<List<ProductResponseDTO>> getFavorites(@RequestParam Long userId) {
+        return ResponseEntity.ok(shopService.getFavorites(userId));
+    }
+
+    // Отзывы
+    @PostMapping("/products/{productId}/reviews")
+    public ResponseEntity<String> addReview(@PathVariable Long productId, @RequestBody ReviewRequest request) {
+        shopService.addReview(request.userId(), productId, request.rating(), request.comment());
+        return ResponseEntity.ok("Отзыв добавлен");
+    }
+
+    @GetMapping("/products/{productId}/reviews")
+    public ResponseEntity<List<ReviewResponseDTO>> getReviews(@PathVariable Long productId) {
+        return ResponseEntity.ok(shopService.getReviews(productId));
+    }
+
+    @PutMapping("/products/{id}")
+    public ResponseEntity<Product> updateProduct(
+            @PathVariable Long id,
+            @RequestParam Long actorId,
+            @RequestBody CreateProductRequest request) {
+        return ResponseEntity.ok(shopService.updateProduct(id, request, actorId));
+    }
+
+    @DeleteMapping("/products/{id}")
+    public ResponseEntity<String> deleteProduct(
+            @PathVariable Long id,
+            @RequestParam Long actorId) {
+        shopService.deleteProduct(id, actorId);
+        return ResponseEntity.ok("Товар скрыт из каталога");
     }
 }

@@ -27,6 +27,9 @@ public class TicketMessage {
     @Column(nullable = false, length = 1000)
     private String text;
 
+    @Column(length = 500)
+    private String attachmentUrl;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 }

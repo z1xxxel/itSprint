@@ -13,4 +13,5 @@ public interface UserQuestRepository extends JpaRepository<UserQuest, Long> {
     Optional<UserQuest> findByUserIdAndQuestId(Long userId, Long questId);
     List<UserQuest> findByUserId(Long userId);
     List<UserQuest> findByStatus(QuestProgressStatus status);
+    long countByStatus(QuestProgressStatus status);
 }

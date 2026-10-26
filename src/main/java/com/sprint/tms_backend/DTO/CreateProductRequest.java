@@ -8,5 +8,7 @@ public record CreateProductRequest(
         BigDecimal price,
         Integer stock,
         String imageUrl,
-        Long categoryId // <--- ДОБАВЛЕНО
+        Long categoryId,
+        Boolean isSpecialOffer,   // <--- ДОБАВЛЕНО
+        Integer discountPercent   // <--- ДОБАВЛЕНО
 ) {}

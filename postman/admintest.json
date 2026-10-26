@@ -1,0 +1,246 @@
+{
+  "info": {
+    "name": "TMS Backend — Admin Panel (Auto-Setup)",
+    "description": "Тесты для проверки админки. Setup выполняется первым.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" }
+  ],
+  "item": [
+    {
+      "name": "00. Setup (Auto-Generate Data)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const runId = Date.now() + '_' + Math.floor(Math.random() * 1000);",
+              "pm.collectionVariables.set('runId', runId);",
+              "const baseUrl = pm.collectionVariables.get('baseUrl');",
+              "",
+              "// 1. Создаем Админа",
+              "pm.sendRequest({",
+              "    url: baseUrl + '/api/users',",
+              "    method: 'POST',",
+              "    header: { 'Content-Type': 'application/json' },",
+              "    body: { mode: 'raw', raw: JSON.stringify({",
+              "        name: 'Admin ' + runId, email: 'admin_' + runId + '@test.local', password: 'secret', role: 'ADMIN', balance: 1000",
+              "    })}",
+              "}, (err, res) => {",
+              "    if (err || res.code !== 200) return console.error('Admin create failed', res.text());",
+              "    const adminId = res.json().id;",
+              "    pm.collectionVariables.set('adminId', adminId);",
+              "",
+              "    // 2. Создаем Сотрудника",
+              "    pm.sendRequest({",
+              "        url: baseUrl + '/api/users',",
+              "        method: 'POST',",
+              "        header: { 'Content-Type': 'application/json' },",
+              "        body: { mode: 'raw', raw: JSON.stringify({",
+              "            name: 'Employee ' + runId, email: 'emp_' + runId + '@test.local', password: 'secret', role: 'EMPLOYEE', balance: 1000",
+              "        })}",
+              "    }, (err2, res2) => {",
+              "        if (err2 || res2.code !== 200) return console.error('Employee create failed', res2.text());",
+              "        const empId = res2.json().id;",
+              "        pm.collectionVariables.set('employeeId', empId);",
+              "",
+              "        // 3. Создаем Тикет",
+              "        pm.sendRequest({",
+              "            url: baseUrl + '/api/support/tickets',",
+              "            method: 'POST',",
+              "            header: { 'Content-Type': 'application/json' },",
+              "            body: { mode: 'raw', raw: JSON.stringify({",
+              "                userId: empId, topic: 'Test Ticket ' + runId, description: 'Need help'",
+              "            })}",
+              "        }, (err3, res3) => {",
+              "            if (err3 || res3.code !== 201) return console.error('Ticket create failed', res3.text());",
+              "            pm.collectionVariables.set('ticketId', res3.json().id);",
+              "            console.log('✅ Данные успешно созданы!');",
+              "        });",
+              "    });",
+              "});"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Setup request completed', () => {",
+              "  pm.expect(pm.collectionVariables.get('adminId')).to.not.be.undefined;",
+              "  pm.expect(pm.collectionVariables.get('employeeId')).to.not.be.undefined;",
+              "  pm.expect(pm.collectionVariables.get('ticketId')).to.not.be.undefined;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+      }
+    },
+    {
+      "name": "01. Dashboard (Analytics)",
+      "item": [
+        {
+          "name": "Get Dashboard Stats",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('Has totalUsers >= 2', () => pm.expect(b.totalUsers).to.be.at.least(2));",
+                  "pm.test('Has pendingTickets >= 1', () => pm.expect(b.pendingTickets).to.be.at.least(1));",
+                  "pm.test('Has totalCoinsInSystem > 0', () => pm.expect(parseFloat(b.totalCoinsInSystem)).to.be.above(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/dashboard?actorId={{adminId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "dashboard"],
+              "query": [{ "key": "actorId", "value": "{{adminId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Dashboard as EMPLOYEE (Expect 403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('403 Forbidden', () => pm.response.to.have.status(403));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/dashboard?actorId={{employeeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "dashboard"],
+              "query": [{ "key": "actorId", "value": "{{employeeId}}" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. System Settings",
+      "item": [
+        {
+          "name": "Get All Settings",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/settings?actorId={{adminId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "settings"],
+              "query": [{ "key": "actorId", "value": "{{adminId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Update Setting",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Value is updated', () => pm.expect(pm.response.json().settingValue).to.eql('999'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/settings/test_setting_key?value=999&actorId={{adminId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "settings", "test_setting_key"],
+              "query": [
+                { "key": "value", "value": "999" },
+                { "key": "actorId", "value": "{{adminId}}" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Global Moderation",
+      "item": [
+        {
+          "name": "Get All Tickets",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const list = pm.response.json();",
+                  "pm.test('Has tickets', () => pm.expect(list.length).to.be.at.least(1));",
+                  "pm.test('Contains our test ticket', () => {",
+                  "  const found = list.some(t => t.id === parseInt(pm.collectionVariables.get('ticketId')));",
+                  "  pm.expect(found).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/tickets?actorId={{adminId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "tickets"],
+              "query": [{ "key": "actorId", "value": "{{adminId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Get All Quests",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/quests?actorId={{adminId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "quests"],
+              "query": [{ "key": "actorId", "value": "{{adminId}}" }]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

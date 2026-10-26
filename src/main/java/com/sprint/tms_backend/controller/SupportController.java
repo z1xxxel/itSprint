@@ -65,4 +65,14 @@ public class SupportController {
             @RequestBody LeaveReviewRequest request) {
         return ResponseEntity.ok(supportService.leaveReview(ticketId, request));
     }
+
+    // Support выдает ачивку по тикету
+    @PostMapping("/tickets/{ticketId}/grant-achievement")
+    public ResponseEntity<String> grantAchievement(
+            @PathVariable Long ticketId,
+            @RequestParam Long supportId,
+            @RequestParam String achievementCode) {
+        supportService.grantAchievementFromTicket(ticketId, supportId, achievementCode);
+        return ResponseEntity.ok("Ачивка " + achievementCode + " успешно выдана!");
+    }
 }

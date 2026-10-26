@@ -19,6 +19,7 @@ public record TicketChatResponseDTO(
             Long id,
             String senderName,
             String text,
+            String attachmentUrl,
             LocalDateTime createdAt
     ) {}
 }

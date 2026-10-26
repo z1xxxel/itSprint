@@ -1,0 +1,346 @@
+{
+  "info": {
+    "name": "TMS Backend — Files, Support & Chat",
+    "description": "Тесты для загрузки картинок, выдачи ачивок из тикетов и личных чатов.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" }
+  ],
+  "item": [
+    {
+      "name": "00. Setup (Create Users)",
+      "item": [
+        {
+          "name": "Generate RunId & Create Users",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const runId = Date.now() + '_' + Math.floor(Math.random() * 1000);",
+                  "pm.collectionVariables.set('runId', runId);",
+                  "",
+                  "const createUser = (role, callback) => {",
+                  "  const email = role.toLowerCase() + '_' + runId + '@test.local';",
+                  "  pm.sendRequest({",
+                  "    url: pm.collectionVariables.get('baseUrl') + '/api/users',",
+                  "    method: 'POST',",
+                  "    header: { 'Content-Type': 'application/json' },",
+                  "    body: { mode: 'raw', raw: JSON.stringify({",
+                  "        name: role + ' ' + runId, email: email, password: 'secret', role: role, balance: 1000",
+                  "    })},",
+                  "  }, (err, res) => {",
+                  "    if (!err && res.code === 200) callback(res.json().id);",
+                  "  });",
+                  "};",
+                  "",
+                  "createUser('ADMIN', (id) => pm.collectionVariables.set('adminId', id));",
+                  "createUser('SUPPORT', (id) => pm.collectionVariables.set('supportId', id));",
+                  "createUser('EMPLOYEE', (id) => pm.collectionVariables.set('emp1Id', id));",
+                  "createUser('EMPLOYEE', (id) => pm.collectionVariables.set('emp2Id', id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01. File Upload",
+      "item": [
+        {
+          "name": "Upload Image (Manual)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const url = pm.response.text();",
+                  "pm.collectionVariables.set('mockImageUrl', url);",
+                  "pm.test('Returns URL', () => pm.expect(url).to.include('uploads/'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Выберите любую картинку перед запуском (вручную)"
+                }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/api/files/upload", "host": ["{{baseUrl}}"], "path": ["api", "files", "upload"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Support (Image & Achievement)",
+      "item": [
+        {
+          "name": "1. Employee Creates Ticket",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('ticketId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": {{emp1Id}},\n  \"topic\": \"Proof for quest {{runId}}\",\n  \"description\": \"Here is my photo\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/support/tickets", "host": ["{{baseUrl}}"], "path": ["api", "support", "tickets"] }
+          }
+        },
+        {
+          "name": "2. Employee Sends Photo in Chat",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"senderId\": {{emp1Id}},\n  \"text\": \"Вот мое фото с пробежки!\",\n  \"attachmentUrl\": \"http://localhost:8080/uploads/mock-photo.jpg\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/support/tickets/{{ticketId}}/messages", "host": ["{{baseUrl}}"], "path": ["api", "support", "tickets", "{{ticketId}}", "messages"] }
+          }
+        },
+        {
+          "name": "3. Support Takes Ticket",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{baseUrl}}/api/support/tickets/{{ticketId}}/take?supportId={{supportId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "support", "tickets", "{{ticketId}}", "take"],
+              "query": [{ "key": "supportId", "value": "{{supportId}}" }]
+            }
+          }
+        },
+        {
+          "name": "4. Support Grants Achievement from Ticket",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/support/tickets/{{ticketId}}/grant-achievement?supportId={{supportId}}&achievementCode=EVENT_JOINER_5",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "support", "tickets", "{{ticketId}}", "grant-achievement"],
+              "query": [
+                { "key": "supportId", "value": "{{supportId}}" },
+                { "key": "achievementCode", "value": "EVENT_JOINER_5" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "5. Verify Achievement in Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const achievements = pm.response.json().achievements;",
+                  "const hasJoiner = achievements.some(a => a.groupCode === 'EVENT_JOINER');",
+                  "pm.test('Profile has EVENT_JOINER achievement', () => pm.expect(hasJoiner).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users/{{emp1Id}}/profile", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{emp1Id}}", "profile"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Employee Chat",
+      "item": [
+        {
+          "name": "1. Start Chat (Emp1 -> Emp2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('chatId', pm.response.json().chatId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"myId\": {{emp1Id}},\n  \"otherUserId\": {{emp2Id}}\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/chats/start", "host": ["{{baseUrl}}"], "path": ["api", "chats", "start"] }
+          }
+        },
+        {
+          "name": "2. Emp1 Sends Message",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"senderId\": {{emp1Id}},\n  \"text\": \"Привет! Как дела?\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/chats/{{chatId}}/messages", "host": ["{{baseUrl}}"], "path": ["api", "chats", "{{chatId}}", "messages"] }
+          }
+        },
+        {
+          "name": "3. Emp2 Checks Unread Messages",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const chats = pm.response.json();",
+                  "const chat = chats.find(c => c.chatId === parseInt(pm.collectionVariables.get('chatId')));",
+                  "pm.test('Found chat', () => pm.expect(chat).to.not.be.undefined);",
+                  "pm.test('Has 1 unread message', () => pm.expect(chat.unreadCount).to.eql(1));",
+                  "pm.test('Last message text is correct', () => pm.expect(chat.lastMessageText).to.eql('Привет! Как дела?'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/chats/my?userId={{emp2Id}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "chats", "my"],
+              "query": [{ "key": "userId", "value": "{{emp2Id}}" }]
+            }
+          }
+        },
+        {
+          "name": "4. Emp2 Opens Chat (Marks as Read)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const chat = pm.response.json();",
+                  "pm.test('Chat has messages', () => pm.expect(chat.messages.length).to.be.above(0));",
+                  "pm.test('Message from Emp1', () => pm.expect(chat.messages[0].text).to.eql('Привет! Как дела?'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/chats/{{chatId}}?userId={{emp2Id}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "chats", "{{chatId}}"],
+              "query": [{ "key": "userId", "value": "{{emp2Id}}" }]
+            }
+          }
+        },
+        {
+          "name": "5. Emp2 Replies",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"senderId\": {{emp2Id}},\n  \"text\": \"Привет! Все отлично, спасибо!\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/chats/{{chatId}}/messages", "host": ["{{baseUrl}}"], "path": ["api", "chats", "{{chatId}}", "messages"] }
+          }
+        },
+        {
+          "name": "6. Emp1 Sees Reply (Unread Check)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const chats = pm.response.json();",
+                  "const chat = chats.find(c => c.chatId === parseInt(pm.collectionVariables.get('chatId')));",
+                  "pm.test('Emp1 has 1 unread', () => pm.expect(chat.unreadCount).to.eql(1));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/chats/my?userId={{emp1Id}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "chats", "my"],
+              "query": [{ "key": "userId", "value": "{{emp1Id}}" }]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

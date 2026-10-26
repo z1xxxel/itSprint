@@ -44,4 +44,8 @@ public class User {
     @JoinColumn(name = "department_id")
     @JsonIgnore
     private Department department;
+
+    // В классе User добавьте поле:
+    @Column(nullable = false)
+    private Boolean isBlocked = false;
 }

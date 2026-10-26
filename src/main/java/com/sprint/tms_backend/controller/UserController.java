@@ -1,8 +1,10 @@
 package com.sprint.tms_backend.controller;
 
 import com.sprint.tms_backend.DTO.CoinTransactionDTO;
+import com.sprint.tms_backend.DTO.UpdateUserRequest;
 import com.sprint.tms_backend.DTO.UserProfileResponseDTO;
 import com.sprint.tms_backend.model.User;
+import com.sprint.tms_backend.model.UserRole;
 import com.sprint.tms_backend.repository.CoinTransactionRepository;
 import com.sprint.tms_backend.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -62,5 +64,28 @@ public class UserController {
     @GetMapping("/{id}/profile")
     public ResponseEntity<UserProfileResponseDTO> getUserProfile(@PathVariable Long id) {
         return ResponseEntity.ok(userService.getUserProfile(id));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<User> updateUser(
+            @PathVariable Long id,
+            @RequestParam Long actorId,
+            @RequestBody UpdateUserRequest request) {
+        return ResponseEntity.ok(userService.updateUser(id, request, actorId));
+    }
+
+    @PutMapping("/{id}/role")
+    public ResponseEntity<User> changeRole(
+            @PathVariable Long id,
+            @RequestParam UserRole role,
+            @RequestParam Long actorId) {
+        return ResponseEntity.ok(userService.changeUserRole(id, role, actorId));
+    }
+
+    @PutMapping("/{id}/block")
+    public ResponseEntity<User> toggleBlock(
+            @PathVariable Long id,
+            @RequestParam Long actorId) {
+        return ResponseEntity.ok(userService.toggleBlockUser(id, actorId));
     }
 }

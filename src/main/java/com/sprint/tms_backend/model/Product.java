@@ -36,4 +36,10 @@ public class Product {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "category_id")
     private Category category;
+
+    private Boolean isSpecialOffer = false;
+    private Integer discountPercent = 0;
+    // В классе Product добавьте поле:
+    @Column(nullable = false)
+    private Boolean isActive = true;
 }

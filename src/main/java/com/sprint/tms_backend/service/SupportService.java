@@ -15,9 +15,10 @@ import java.util.List;
 public class SupportService {
 
     private final SupportTicketRepository ticketRepository;
-    private final TicketMessageRepository messageRepository;
+    private final TicketMessageRepository messageRepository; // <-- ВОТ ЭТОГО ПОЛЯ НЕ ХВАТАЛО
     private final UserRepository userRepository;
     private final RatingTransactionRepository ratingTxRepository;
+    private final AchievementService achievementService; // Для выдачи ачивок из поддержки
 
     // === 1. Пользователь создает тикет ===
     @Transactional
@@ -52,7 +53,7 @@ public class SupportService {
         return mapToTicketDto(ticketRepository.save(ticket));
     }
 
-    // === 3. Отправка сообщения в чат ===
+    // === 3. Отправка сообщения в чат (с картинкой или без) ===
     @Transactional
     public TicketMessageDTO sendMessage(Long ticketId, SendMessageRequest request) {
         SupportTicket ticket = ticketRepository.findById(ticketId)
@@ -76,8 +77,9 @@ public class SupportService {
         msg.setTicket(ticket);
         msg.setSender(sender);
         msg.setText(request.text());
+        msg.setAttachmentUrl(request.attachmentUrl()); // <-- ССЫЛКА НА ФОТО
 
-        return mapToMessageDto(messageRepository.save(msg));
+        return mapToMessageDto(messageRepository.save(msg)); // <-- ТЕПЕРЬ РАБОТАЕТ
     }
 
     // === 4. Завершение тикета ===
@@ -152,7 +154,11 @@ public class SupportService {
 
         List<TicketChatResponseDTO.MessageDTO> messages = messageRepository.findByTicketIdOrderByCreatedAtAsc(ticketId).stream()
                 .map(m -> new TicketChatResponseDTO.MessageDTO(
-                        m.getId(), m.getSender().getName(), m.getText(), m.getCreatedAt()
+                        m.getId(),
+                        m.getSender().getName(),
+                        m.getText(),
+                        m.getAttachmentUrl(), // <-- ДОБАВЛЯЕМ
+                        m.getCreatedAt()
                 )).toList();
 
         return new TicketChatResponseDTO(
@@ -163,7 +169,21 @@ public class SupportService {
         );
     }
 
-    // === 7. Получение списков тикетов (Тоже мапим в DTO!) ===
+    // === 7. ВЫДАЧА АЧИВКИ ИЗ ТИКЕТА (Только для Support) ===
+    @Transactional
+    public void grantAchievementFromTicket(Long ticketId, Long supportId, String achievementCode) {
+        SupportTicket ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new RuntimeException("Тикет не найден"));
+
+        if (ticket.getAssignee() == null || !ticket.getAssignee().getId().equals(supportId)) {
+            throw new SecurityException("Только назначенный сотрудник поддержки может выдать награду по этому тикету");
+        }
+
+        // Выдаем ачивку пользователю, который создал тикет
+        achievementService.grantAchievementByCode(ticket.getCreator().getId(), achievementCode);
+    }
+
+    // === 8. Получение списков тикетов ===
     @Transactional(readOnly = true)
     public List<SupportTicketDTO> getMyTickets(Long userId) {
         return ticketRepository.findByCreatorIdOrderByCreatedAtDesc(userId).stream()
@@ -179,29 +199,19 @@ public class SupportService {
     // === ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ МАППИНГА ===
     private SupportTicketDTO mapToTicketDto(SupportTicket ticket) {
         return new SupportTicketDTO(
-                ticket.getId(),
-                ticket.getTopic(),
-                ticket.getDescription(),
-                ticket.getCreator().getId(),
-                ticket.getCreator().getName(),
+                ticket.getId(), ticket.getTopic(), ticket.getDescription(),
+                ticket.getCreator().getId(), ticket.getCreator().getName(),
                 ticket.getAssignee() != null ? ticket.getAssignee().getId() : null,
                 ticket.getAssignee() != null ? ticket.getAssignee().getName() : null,
-                ticket.getStatus(),
-                ticket.getCreatedAt(),
-                ticket.getClosedAt(),
-                ticket.getRating(),
-                ticket.getReviewComment()
+                ticket.getStatus(), ticket.getCreatedAt(), ticket.getClosedAt(),
+                ticket.getRating(), ticket.getReviewComment()
         );
     }
 
     private TicketMessageDTO mapToMessageDto(TicketMessage msg) {
         return new TicketMessageDTO(
-                msg.getId(),
-                msg.getTicket().getId(),
-                msg.getSender().getId(),
-                msg.getSender().getName(),
-                msg.getText(),
-                msg.getCreatedAt()
+                msg.getId(), msg.getTicket().getId(), msg.getSender().getId(),
+                msg.getSender().getName(), msg.getText(), msg.getCreatedAt()
         );
     }
 }

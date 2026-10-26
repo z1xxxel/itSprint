@@ -42,4 +42,6 @@ public interface EventRepository extends JpaRepository<Event, Long> {
 
     // Считает, сколько событий организовал пользователь (для профиля)
     long countByOrganizerId(Long organizerId);
+
+    long countByEventStatus(EventStatus status);
 }

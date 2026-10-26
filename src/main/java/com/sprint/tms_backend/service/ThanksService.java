@@ -1,16 +1,21 @@
 package com.sprint.tms_backend.service;
 
 import com.sprint.tms_backend.DTO.ThanksFeedResponseDTO;
+import com.sprint.tms_backend.DTO.ThanksStatsDTO;
+import com.sprint.tms_backend.DTO.UserThanksDTO;
 import com.sprint.tms_backend.model.CoinTransaction;
 import com.sprint.tms_backend.model.CoinTransactionType;
 import com.sprint.tms_backend.model.User;
 import com.sprint.tms_backend.repository.CoinTransactionRepository;
 import com.sprint.tms_backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -55,5 +60,70 @@ public class ThanksService {
                 tx.getComment(),
                 tx.getCreatedAt()
         )).toList();
+    }
+    // Получить благодарности пользователя (received / sent / all)
+    @Transactional(readOnly = true)
+    public Page<UserThanksDTO> getUserThanks(Long userId, String direction, int page, int size) {
+        // Проверяем, что пользователь существует
+        if (!userRepository.existsById(userId)) {
+            throw new RuntimeException("Пользователь не найден");
+        }
+
+        Pageable pageable = PageRequest.of(page, size);
+        Page<CoinTransaction> txs;
+
+        if ("received".equalsIgnoreCase(direction)) {
+            txs = coinTxRepository.findReceivedThanks(userId, pageable);
+        } else if ("sent".equalsIgnoreCase(direction)) {
+            txs = coinTxRepository.findSentThanks(userId, pageable);
+        } else {
+            txs = coinTxRepository.findHistoryByUser(userId, pageable)
+                    .map(t -> t) // чтобы тип совпал
+                    .map(t -> t.getType() == CoinTransactionType.PEER_THANKS ? t : null);
+            // Проще: сделать findAllThanksByUser в репозитории
+        }
+
+        // Собираем имена всех участников одним запросом
+        Set<Long> ids = new HashSet<>();
+        txs.getContent().forEach(t -> {
+            if (t.getFromUserId() != null) ids.add(t.getFromUserId());
+            if (t.getToUserId() != null) ids.add(t.getToUserId());
+        });
+        Map<Long, String> names = userRepository.findAllById(ids).stream()
+                .collect(Collectors.toMap(User::getId, User::getName));
+
+        return txs.map(t -> new UserThanksDTO(
+                t.getId(),
+                t.getFromUserId(), names.getOrDefault(t.getFromUserId(), "—"),
+                t.getToUserId(),   names.getOrDefault(t.getToUserId(), "—"),
+                t.getAmount(), t.getTag(), t.getComment(), t.getCreatedAt()
+        ));
+    }
+
+    // Статистика по благодарностям
+    @Transactional(readOnly = true)
+    public ThanksStatsDTO getStats(Long userId) {
+        if (!userRepository.existsById(userId)) {
+            throw new RuntimeException("Пользователь не найден");
+        }
+
+        long received = coinTxRepository.countReceived(userId);
+        long sent = coinTxRepository.countSent(userId);
+        BigDecimal sumRecv = coinTxRepository.sumReceived(userId);
+        BigDecimal sumSent = coinTxRepository.sumSent(userId);
+
+        // Топ-5 благодарителей
+        List<Object[]> topRaw = coinTxRepository.findTopThankers(userId, PageRequest.of(0, 5));
+        Set<Long> ids = topRaw.stream().map(o -> (Long) o[0]).collect(Collectors.toSet());
+        Map<Long, String> names = userRepository.findAllById(ids).stream()
+                .collect(Collectors.toMap(User::getId, User::getName));
+
+        List<ThanksStatsDTO.TopThanker> top = topRaw.stream()
+                .map(o -> new ThanksStatsDTO.TopThanker(
+                        names.getOrDefault((Long) o[0], "—"),
+                        ((Number) o[1]).longValue()))
+                .toList();
+
+        return new ThanksStatsDTO(received, sent, sumRecv, sumSent, top);
     }
 }

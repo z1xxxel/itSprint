@@ -34,8 +34,17 @@ public class UserService {
         if (userRepository.findByEmail(user.getEmail()).isPresent()) {
             throw new RuntimeException("Пользователь с таким email существует");
         }
-        if (user.getBalance() == null) user.setBalance(BigDecimal.ZERO);
-        if (user.getRating() == null) user.setRating(0.0);
+        if (user.getBalance() == null) {
+            user.setBalance(BigDecimal.ZERO);
+        }
+        if (user.getRating() == null) {
+            user.setRating(0.0);
+        }
+        // ДОБАВИТЬ ВОТ ЭТУ СТРОКУ:
+        if (user.getIsBlocked() == null) {
+            user.setIsBlocked(false);
+        }
+
         return userRepository.save(user);
     }
 
@@ -185,5 +194,47 @@ public class UserService {
             ));
         }
         return result;
+    }
+
+    // Обновление данных (Админ или HR)
+    @Transactional
+    public User updateUser(Long userId, UpdateUserRequest request, Long actorId) {
+        User actor = userRepository.findById(actorId).orElseThrow();
+        if (!actor.getRole().has(Permission.USER_MANAGE)) {
+            throw new SecurityException("Нет прав на редактирование пользователей");
+        }
+
+        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+        if (request.name() != null) user.setName(request.name());
+        if (request.email() != null) user.setEmail(request.email());
+        if (request.password() != null) user.setPassword(request.password());
+
+        return userRepository.save(user);
+    }
+
+    // Смена роли (Только ADMIN)
+    @Transactional
+    public User changeUserRole(Long userId, UserRole newRole, Long actorId) {
+        User actor = userRepository.findById(actorId).orElseThrow();
+        if (actor.getRole() != UserRole.ADMIN) {
+            throw new SecurityException("Только ADMIN может менять роли");
+        }
+
+        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+        user.setRole(newRole);
+        return userRepository.save(user);
+    }
+
+    // Блокировка/Разблокировка (Только ADMIN)
+    @Transactional
+    public User toggleBlockUser(Long userId, Long actorId) {
+        User actor = userRepository.findById(actorId).orElseThrow();
+        if (actor.getRole() != UserRole.ADMIN) {
+            throw new SecurityException("Только ADMIN может блокировать пользователей");
+        }
+
+        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+        user.setIsBlocked(!user.getIsBlocked());
+        return userRepository.save(user);
     }
 }

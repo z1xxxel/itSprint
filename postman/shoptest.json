@@ -1,0 +1,483 @@
+{
+  "info": {
+    "name": "TMS Backend — Shop Advanced Features",
+    "description": "Тесты для поиска, фильтрации, избранного, отзывов и скидок.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" }
+  ],
+  "item": [
+    {
+      "name": "00. Setup (Create Admin & Employee)",
+      "item": [
+        {
+          "name": "Generate RunId & Create Users",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const runId = Date.now() + '_' + Math.floor(Math.random() * 1000);",
+                  "pm.collectionVariables.set('runId', runId);",
+                  "",
+                  "const createUser = (role, callback) => {",
+                  "  const email = role.toLowerCase() + '_' + runId + '@test.local';",
+                  "  pm.sendRequest({",
+                  "    url: pm.collectionVariables.get('baseUrl') + '/api/users',",
+                  "    method: 'POST',",
+                  "    header: { 'Content-Type': 'application/json' },",
+                  "    body: { mode: 'raw', raw: JSON.stringify({",
+                  "        name: role + ' ' + runId, email: email, password: 'secret', role: role, balance: 10000",
+                  "    })},",
+                  "  }, (err, res) => {",
+                  "    if (!err && res.code === 200) callback(res.json().id);",
+                  "  });",
+                  "};",
+                  "",
+                  "createUser('ADMIN', (id) => pm.collectionVariables.set('adminId', id));",
+                  "createUser('EMPLOYEE', (id) => pm.collectionVariables.set('employeeId', id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01. Categories & Products",
+      "item": [
+        {
+          "name": "Create Category",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('categoryId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/categories?actorId={{adminId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shop", "categories"],
+              "query": [{ "key": "actorId", "value": "{{adminId}}" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tech {{runId}}\",\n  \"description\": \"Test category\",\n  \"sortOrder\": 1\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Normal Product",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('product1Id', b.id);",
+                  "pm.test('No discount', () => pm.expect(b.isSpecialOffer).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/products?actorId={{adminId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shop", "products"],
+              "query": [{ "key": "actorId", "value": "{{adminId}}" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Laptop {{runId}}\",\n  \"description\": \"Good laptop\",\n  \"price\": 5000.00,\n  \"stock\": 10,\n  \"categoryId\": {{categoryId}}\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Special Offer Product (Discount 20%)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('product2Id', b.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/products?actorId={{adminId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shop", "products"],
+              "query": [{ "key": "actorId", "value": "{{adminId}}" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Discount Headphones {{runId}}\",\n  \"description\": \"On sale\",\n  \"price\": 1000.00,\n  \"stock\": 5,\n  \"categoryId\": {{categoryId}},\n  \"isSpecialOffer\": true,\n  \"discountPercent\": 20\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Search, Filter & Sort",
+      "item": [
+        {
+          "name": "Search by Query",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const list = pm.response.json();",
+                  "pm.test('Found at least 1 product', () => pm.expect(list.length).to.be.above(0));",
+                  "pm.test('Name contains Laptop', () => pm.expect(list[0].name).to.include('Laptop'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/products/search?query=Laptop",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shop", "products", "search"],
+              "query": [{ "key": "query", "value": "Laptop" }]
+            }
+          }
+        },
+        {
+          "name": "Filter by Category and Price (min 1000, max 6000)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const list = pm.response.json();",
+                  "pm.test('Found products', () => pm.expect(list.length).to.be.above(0));",
+                  "list.forEach(p => {",
+                  "  pm.expect(parseFloat(p.price)).to.be.at.least(1000);",
+                  "  pm.expect(parseFloat(p.price)).to.be.at.most(6000);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/products/search?categoryId={{categoryId}}&minPrice=1000&maxPrice=6000",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shop", "products", "search"],
+              "query": [
+                { "key": "categoryId", "value": "{{categoryId}}" },
+                { "key": "minPrice", "value": "1000" },
+                { "key": "maxPrice", "value": "6000" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Sort by Price DESC",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const list = pm.response.json();",
+                  "if (list.length > 1) {",
+                  "  const firstPrice = parseFloat(list[0].price);",
+                  "  const secondPrice = parseFloat(list[1].price);",
+                  "  pm.test('Sorted descending', () => pm.expect(firstPrice).to.be.at.least(secondPrice));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/products/search?sortBy=price&sortDir=desc",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shop", "products", "search"],
+              "query": [
+                { "key": "sortBy", "value": "price" },
+                { "key": "sortDir", "value": "desc" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Favorites",
+      "item": [
+        {
+          "name": "Add Product 1 to Favorites",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/favorites/{{product1Id}}?userId={{employeeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shop", "favorites", "{{product1Id}}"],
+              "query": [{ "key": "userId", "value": "{{employeeId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Get Favorites List",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const list = pm.response.json();",
+                  "pm.test('Has 1 favorite', () => pm.expect(list.length).to.eql(1));",
+                  "pm.test('It is Product 1', () => pm.expect(list[0].id).to.eql(parseInt(pm.collectionVariables.get('product1Id'))));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/favorites?userId={{employeeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shop", "favorites"],
+              "query": [{ "key": "userId", "value": "{{employeeId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Remove from Favorites",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/favorites/{{product1Id}}?userId={{employeeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shop", "favorites", "{{product1Id}}"],
+              "query": [{ "key": "userId", "value": "{{employeeId}}" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. Purchase & Reviews",
+      "item": [
+        {
+          "name": "Try to review WITHOUT purchase (Expect 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                  "pm.test('Mentions purchase', () => pm.expect(pm.response.text()).to.match(/куп|купил|получил/i));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/products/{{product1Id}}/reviews",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shop", "products", "{{product1Id}}", "reviews"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": {{employeeId}},\n  \"rating\": 5,\n  \"comment\": \"Отличный товар!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Purchase Product 1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('orderId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/shop/purchase", "host": ["{{baseUrl}}"], "path": ["api", "shop", "purchase"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": {{employeeId}},\n  \"productId\": {{product1Id}},\n  \"quantity\": 1\n}"
+            }
+          }
+        },
+        {
+          "name": "Admin Approves Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/orders/{{orderId}}/approve?actorId={{adminId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shop", "orders", "{{orderId}}", "approve"],
+              "query": [{ "key": "actorId", "value": "{{adminId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Admin Completes Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/orders/{{orderId}}/complete?actorId={{adminId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shop", "orders", "{{orderId}}", "complete"],
+              "query": [{ "key": "actorId", "value": "{{adminId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Add Review (Now allowed)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/products/{{product1Id}}/reviews",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shop", "products", "{{product1Id}}", "reviews"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": {{employeeId}},\n  \"rating\": 5,\n  \"comment\": \"Отличный товар!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Reviews for Product",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const list = pm.response.json();",
+                  "pm.test('Has 1 review', () => pm.expect(list.length).to.eql(1));",
+                  "pm.test('Rating is 5', () => pm.expect(list[0].rating).to.eql(5));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/products/{{product1Id}}/reviews",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shop", "products", "{{product1Id}}", "reviews"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05. Check Discounts",
+      "item": [
+        {
+          "name": "Verify Discounted Price",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const list = pm.response.json();",
+                  "// Находим товар со скидкой",
+                  "const special = list.find(p => p.id === parseInt(pm.collectionVariables.get('product2Id')));",
+                  "pm.test('Found special offer product', () => pm.expect(special).to.not.be.undefined);",
+                  "pm.test('Original price is 1000', () => pm.expect(parseFloat(special.price)).to.eql(1000.00));",
+                  "pm.test('Final price is 800 (20% off)', () => pm.expect(parseFloat(special.finalPrice)).to.eql(800.00));",
+                  "pm.test('isSpecialOffer = true', () => pm.expect(special.isSpecialOffer).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shop", "products"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

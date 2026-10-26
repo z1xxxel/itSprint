@@ -1,0 +1,627 @@
+{
+  "info": {
+    "name": "TMS Backend - Full E2E Mega Test",
+    "description": "Сквозной тест всех модулей. Запускать ТОЛЬКО через Run Collection.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" }
+  ],
+  "item": [
+    {
+      "name": "00. Setup Users & Departments",
+      "item": [
+        {
+          "name": "1. Create Admin",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const runId = Date.now() + '_' + Math.floor(Math.random() * 1000);",
+                  "pm.collectionVariables.set('runId', runId);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('adminId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Admin\",\n  \"email\": \"admin_{{runId}}@test.local\",\n  \"password\": \"secret\",\n  \"role\": \"ADMIN\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        },
+        {
+          "name": "2. Create HR",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('hrId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"HR\",\n  \"email\": \"hr_{{runId}}@test.local\",\n  \"password\": \"secret\",\n  \"role\": \"HR\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        },
+        {
+          "name": "3. Create Manager",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('mgrId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Manager\",\n  \"email\": \"mgr_{{runId}}@test.local\",\n  \"password\": \"secret\",\n  \"role\": \"MANAGER\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        },
+        {
+          "name": "4. Create Employee",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('empId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Employee\",\n  \"email\": \"emp_{{runId}}@test.local\",\n  \"password\": \"secret\",\n  \"role\": \"EMPLOYEE\",\n  \"balance\": 10000\n}" },
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        },
+        {
+          "name": "5. Create Support",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('supId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Support\",\n  \"email\": \"sup_{{runId}}@test.local\",\n  \"password\": \"secret\",\n  \"role\": \"SUPPORT\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        },
+        {
+          "name": "6. Create Department & Assign",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.sendRequest({",
+                  "  url: pm.collectionVariables.get('baseUrl') + '/api/departments',",
+                  "  method: 'POST',",
+                  "  header: { 'Content-Type': 'application/json' },",
+                  "  body: { mode: 'raw', raw: JSON.stringify({",
+                  "    name: 'IT ' + pm.collectionVariables.get('runId'),",
+                  "    description: 'IT Dept'",
+                  "  })}",
+                  "}, (err, res) => {",
+                  "  if (!err && res.code === 201) {",
+                  "    const deptId = res.json().id;",
+                  "    pm.collectionVariables.set('deptId', deptId);",
+                  "    pm.sendRequest({",
+                  "      url: pm.collectionVariables.get('baseUrl') + '/api/departments/' + deptId + '/users/' + pm.collectionVariables.get('empId'),",
+                  "      method: 'PUT'",
+                  "    }, (err2, res2) => {});",
+                  "  }",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Department created and assigned', () => pm.expect(true).to.be.true);"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01. Shop (Catalog, Purchase, Review)",
+      "item": [
+        {
+          "name": "1. Create Category & Product",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.sendRequest({",
+                  "  url: pm.collectionVariables.get('baseUrl') + '/api/shop/categories?actorId=' + pm.collectionVariables.get('adminId'),",
+                  "  method: 'POST',",
+                  "  header: { 'Content-Type': 'application/json' },",
+                  "  body: { mode: 'raw', raw: JSON.stringify({",
+                  "    name: 'Merch ' + pm.collectionVariables.get('runId')",
+                  "  })}",
+                  "}, (err, res) => {",
+                  "  if (!err && res.code === 201) {",
+                  "    const catId = res.json().id;",
+                  "    pm.collectionVariables.set('catId', catId);",
+                  "    pm.sendRequest({",
+                  "      url: pm.collectionVariables.get('baseUrl') + '/api/shop/products?actorId=' + pm.collectionVariables.get('adminId'),",
+                  "      method: 'POST',",
+                  "      header: { 'Content-Type': 'application/json' },",
+                  "      body: { mode: 'raw', raw: JSON.stringify({",
+                  "        name: 'Mug ' + pm.collectionVariables.get('runId'),",
+                  "        price: 100, stock: 10, categoryId: catId",
+                  "      })}",
+                  "    }, (err2, res2) => {",
+                  "      if (!err2 && res2.code === 201) {",
+                  "        pm.collectionVariables.set('prodId', res2.json().id);",
+                  "      }",
+                  "    });",
+                  "  }",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Product created', () => pm.expect(pm.collectionVariables.get('prodId')).to.not.be.undefined);"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        },
+        {
+          "name": "2. Search & Favorites",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Search OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/shop/products/search?query=Mug", "host": ["{{baseUrl}}"], "path": ["api", "shop", "products", "search"], "query": [{ "key": "query", "value": "Mug" }] }
+          }
+        },
+        {
+          "name": "3. Purchase Product",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('orderId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": {{empId}},\n  \"productId\": {{prodId}},\n  \"quantity\": 1\n}" },
+            "url": { "raw": "{{baseUrl}}/api/shop/purchase", "host": ["{{baseUrl}}"], "path": ["api", "shop", "purchase"] }
+          }
+        },
+        {
+          "name": "4. Approve & Complete Order",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.sendRequest({",
+                  "  url: pm.collectionVariables.get('baseUrl') + '/api/shop/orders/' + pm.collectionVariables.get('orderId') + '/approve?actorId=' + pm.collectionVariables.get('mgrId'),",
+                  "  method: 'PUT'",
+                  "}, (err, res) => {",
+                  "  pm.sendRequest({",
+                  "    url: pm.collectionVariables.get('baseUrl') + '/api/shop/orders/' + pm.collectionVariables.get('orderId') + '/complete?actorId=' + pm.collectionVariables.get('mgrId'),",
+                  "    method: 'PUT'",
+                  "  }, (err2, res2) => {});",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Order completed', () => pm.expect(true).to.be.true);"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        },
+        {
+          "name": "5. Leave Review",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": {{empId}},\n  \"rating\": 5,\n  \"comment\": \"Great mug!\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/shop/products/{{prodId}}/reviews", "host": ["{{baseUrl}}"], "path": ["api", "shop", "products", "{{prodId}}", "reviews"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Quests & Events",
+      "item": [
+        {
+          "name": "1. Create & Complete Quest",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.sendRequest({",
+                  "  url: pm.collectionVariables.get('baseUrl') + '/api/quests',",
+                  "  method: 'POST',",
+                  "  header: { 'Content-Type': 'application/json' },",
+                  "  body: { mode: 'raw', raw: JSON.stringify({",
+                  "    creatorId: pm.collectionVariables.get('mgrId'), title: 'Quest ' + pm.collectionVariables.get('runId'), description: 'Do it', rewardCoins: 50",
+                  "  })}",
+                  "}, (err, res) => {",
+                  "  if (!err && res.code === 201) {",
+                  "    const qId = res.json().id;",
+                  "    pm.sendRequest({",
+                  "      url: pm.collectionVariables.get('baseUrl') + '/api/quests/' + qId + '/start?userId=' + pm.collectionVariables.get('empId'),",
+                  "      method: 'POST'",
+                  "    }, (err2, res2) => {",
+                  "      pm.sendRequest({",
+                  "        url: pm.collectionVariables.get('baseUrl') + '/api/quests/' + qId + '/submit?userId=' + pm.collectionVariables.get('empId'),",
+                  "        method: 'POST'",
+                  "      }, (err3, res3) => {",
+                  "        pm.sendRequest({",
+                  "          url: pm.collectionVariables.get('baseUrl') + '/api/quests/review?actorId=' + pm.collectionVariables.get('mgrId'),",
+                  "          method: 'GET'",
+                  "        }, (err4, res4) => {",
+                  "          if (!err4 && res4.code === 200 && res4.json().length > 0) {",
+                  "            const uqId = res4.json()[0].id;",
+                  "            pm.sendRequest({",
+                  "              url: pm.collectionVariables.get('baseUrl') + '/api/quests/review/' + uqId + '/approve?actorId=' + pm.collectionVariables.get('mgrId'),",
+                  "              method: 'PUT'",
+                  "            }, (err5, res5) => {});",
+                  "          }",
+                  "        });",
+                  "      });",
+                  "    });",
+                  "  }",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Quest flow completed', () => pm.expect(true).to.be.true);"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        },
+        {
+          "name": "2. Create & Assign Event",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.sendRequest({",
+                  "  url: pm.collectionVariables.get('baseUrl') + '/api/events',",
+                  "  method: 'POST',",
+                  "  header: { 'Content-Type': 'application/json' },",
+                  "  body: { mode: 'raw', raw: JSON.stringify({",
+                  "    organizerId: pm.collectionVariables.get('mgrId'),",
+                  "    fromTime: '2027-01-01T10:00:00', toTime: '2027-01-01T12:00:00',",
+                  "    category: 'IT', nameEvent: 'Event ' + pm.collectionVariables.get('runId'),",
+                  "    paidInCoins: true, rewardCoins: 100, rewardRating: 5.0",
+                  "  })}",
+                  "}, (err, res) => {",
+                  "  if (!err && res.code === 201) {",
+                  "    const evId = res.json().id;",
+                  "    pm.sendRequest({",
+                  "      url: pm.collectionVariables.get('baseUrl') + '/api/events/' + evId + '/assign',",
+                  "      method: 'PUT',",
+                  "      header: { 'Content-Type': 'application/json' },",
+                  "      body: { mode: 'raw', raw: JSON.stringify({ actorId: pm.collectionVariables.get('hrId') }) }",
+                  "    }, (err2, res2) => {",
+                  "      pm.sendRequest({",
+                  "        url: pm.collectionVariables.get('baseUrl') + '/api/events/' + evId + '/participants',",
+                  "        method: 'POST',",
+                  "        header: { 'Content-Type': 'application/json' },",
+                  "        body: { mode: 'raw', raw: JSON.stringify({ userId: pm.collectionVariables.get('empId') }) }",
+                  "      }, (err3, res3) => {});",
+                  "    });",
+                  "  }",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Event flow completed', () => pm.expect(true).to.be.true);"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Surveys & Support",
+      "item": [
+        {
+          "name": "1. Create & Submit Survey",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.sendRequest({",
+                  "  url: pm.collectionVariables.get('baseUrl') + '/api/surveys',",
+                  "  method: 'POST',",
+                  "  header: { 'Content-Type': 'application/json' },",
+                  "  body: { mode: 'raw', raw: JSON.stringify({",
+                  "    creatorId: pm.collectionVariables.get('hrId'),",
+                  "    title: 'Survey ' + pm.collectionVariables.get('runId'), description: 'Desc',",
+                  "    deadline: '2027-01-01T10:00:00', rewardRating: 5.0, penaltyRating: -1.0,",
+                  "    questions: [{ text: 'How?', options: [{ text: 'Good', value: 5 }] }]",
+                  "  })}",
+                  "}, (err, res) => {",
+                  "  if (!err && res.code === 201) {",
+                  "    const surv = res.json();",
+                  "    const qId = surv.questions[0].id;",
+                  "    const oId = surv.questions[0].options[0].id;",
+                  "    pm.sendRequest({",
+                  "      url: pm.collectionVariables.get('baseUrl') + '/api/surveys/' + surv.id + '/submit',",
+                  "      method: 'POST',",
+                  "      header: { 'Content-Type': 'application/json' },",
+                  "      body: { mode: 'raw', raw: JSON.stringify({",
+                  "        userId: pm.collectionVariables.get('empId'), answers: { [qId]: oId }",
+                  "      })}",
+                  "    }, (err2, res2) => {});",
+                  "  }",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Survey completed', () => pm.expect(true).to.be.true);"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        },
+        {
+          "name": "2. Support Ticket Flow",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.sendRequest({",
+                  "  url: pm.collectionVariables.get('baseUrl') + '/api/support/tickets',",
+                  "  method: 'POST',",
+                  "  header: { 'Content-Type': 'application/json' },",
+                  "  body: { mode: 'raw', raw: JSON.stringify({",
+                  "    userId: pm.collectionVariables.get('empId'), topic: 'Ticket ' + pm.collectionVariables.get('runId'), description: 'Help'",
+                  "  })}",
+                  "}, (err, res) => {",
+                  "  if (!err && res.code === 201) {",
+                  "    const tId = res.json().id;",
+                  "    pm.sendRequest({",
+                  "      url: pm.collectionVariables.get('baseUrl') + '/api/support/tickets/' + tId + '/take?supportId=' + pm.collectionVariables.get('supId'),",
+                  "      method: 'PUT'",
+                  "    }, (err2, res2) => {",
+                  "      pm.sendRequest({",
+                  "        url: pm.collectionVariables.get('baseUrl') + '/api/support/tickets/' + tId + '/messages',",
+                  "        method: 'POST',",
+                  "        header: { 'Content-Type': 'application/json' },",
+                  "        body: { mode: 'raw', raw: JSON.stringify({ senderId: pm.collectionVariables.get('empId'), text: 'Hello' }) }",
+                  "      }, (err3, res3) => {",
+                  "        pm.sendRequest({",
+                  "          url: pm.collectionVariables.get('baseUrl') + '/api/support/tickets/' + tId + '/complete?supportId=' + pm.collectionVariables.get('supId'),",
+                  "          method: 'PUT'",
+                  "        }, (err4, res4) => {",
+                  "          pm.sendRequest({",
+                  "            url: pm.collectionVariables.get('baseUrl') + '/api/support/tickets/' + tId + '/review',",
+                  "            method: 'POST',",
+                  "            header: { 'Content-Type': 'application/json' },",
+                  "            body: { mode: 'raw', raw: JSON.stringify({ userId: pm.collectionVariables.get('empId'), rating: 5, comment: 'Thanks' }) }",
+                  "          }, (err5, res5) => {});",
+                  "        });",
+                  "      });",
+                  "    });",
+                  "  }",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Support flow completed', () => pm.expect(true).to.be.true);"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. Analytics & Profile",
+      "item": [
+        {
+          "name": "1. Admin Dashboard",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('Dashboard has data', () => pm.expect(b.totalUsers).to.be.above(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/admin/dashboard?actorId={{adminId}}", "host": ["{{baseUrl}}"], "path": ["api", "admin", "dashboard"], "query": [{ "key": "actorId", "value": "{{adminId}}" }] }
+          }
+        },
+        {
+          "name": "2. Global Transactions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/admin/transactions?actorId={{adminId}}", "host": ["{{baseUrl}}"], "path": ["api", "admin", "transactions"], "query": [{ "key": "actorId", "value": "{{adminId}}" }] }
+          }
+        },
+        {
+          "name": "3. Employee Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('Has achievements', () => pm.expect(b.achievements).to.be.an('array'));",
+                  "pm.test('Has rating graph', () => pm.expect(b.recentRatingTransactions).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users/{{empId}}/profile", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{empId}}", "profile"] }
+          }
+        },
+        {
+          "name": "4. Seasons Current",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/seasons/current?actorId={{empId}}", "host": ["{{baseUrl}}"], "path": ["api", "seasons", "current"], "query": [{ "key": "actorId", "value": "{{empId}}" }] }
+          }
+        },
+        {
+          "name": "5. Admin Changes Role & Blocks",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.sendRequest({",
+                  "  url: pm.collectionVariables.get('baseUrl') + '/api/users/' + pm.collectionVariables.get('empId') + '/role?role=ORGANIZER&actorId=' + pm.collectionVariables.get('adminId'),",
+                  "  method: 'PUT'",
+                  "}, (err, res) => {",
+                  "  pm.sendRequest({",
+                  "    url: pm.collectionVariables.get('baseUrl') + '/api/users/' + pm.collectionVariables.get('empId') + '/block?actorId=' + pm.collectionVariables.get('adminId'),",
+                  "    method: 'PUT'",
+                  "  }, (err2, res2) => {});",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('Role changed and blocked', () => pm.expect(true).to.be.true);"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -45,4 +45,10 @@ public class CoinTransaction {
     @Enumerated(EnumType.STRING)
     @Column(length = 30)
     private ThanksTag tag;
+
+    @Column(nullable = false)
+    private Boolean isCancelled = false; // Отменена ли транзакция
+
+    @Column(length = 500)
+    private String cancellationReason; // Причина отмены админом
 }

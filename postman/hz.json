@@ -1,0 +1,508 @@
+{
+  "info": {
+    "name": "TMS Backend — Economy, Auth & Shop (v2)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" }
+  ],
+  "item": [
+    {
+      "name": "00. Setup Admin (Bootstrap)",
+      "item": [
+        {
+          "name": "Create First Admin",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const runId = Date.now() + '_' + Math.floor(Math.random() * 1000);",
+                  "pm.collectionVariables.set('runId', runId);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Admin created (or already exists)', () => {",
+                  "  // 200 - создан, 400 - уже существует (тогда получим его ниже)",
+                  "  pm.expect([200, 400]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('adminId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Test Admin\",\n  \"email\": \"test_admin_{{runId}}@test.local\",\n  \"password\": \"secret\",\n  \"role\": \"ADMIN\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        },
+        {
+          "name": "Find Admin ID (if already existed)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const users = pm.response.json();",
+                  "const admin = users.find(u => u.role === 'ADMIN');",
+                  "if (admin) {",
+                  "  pm.collectionVariables.set('adminId', admin.id);",
+                  "}",
+                  "pm.test('Admin exists', () => pm.expect(admin).to.not.be.undefined);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01. Create Manager & Employee",
+      "item": [
+        {
+          "name": "Create Manager",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('managerId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Test Manager\",\n  \"email\": \"test_mgr_{{runId}}@test.local\",\n  \"password\": \"secret\",\n  \"role\": \"MANAGER\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/users?actorId={{adminId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users"],
+              "query": [{ "key": "actorId", "value": "{{adminId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Create Employee",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('employeeId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Test Employee\",\n  \"email\": \"test_emp_{{runId}}@test.local\",\n  \"password\": \"secret\",\n  \"role\": \"EMPLOYEE\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/users?actorId={{adminId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users"],
+              "query": [{ "key": "actorId", "value": "{{adminId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Fund Treasury (50000)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/treasury/fund?actorId={{adminId}}&amount=50000",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "treasury", "fund"],
+              "query": [
+                { "key": "actorId", "value": "{{adminId}}" },
+                { "key": "amount", "value": "50000" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Auth Flow",
+      "item": [
+        {
+          "name": "1. Login with Original Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"test_emp_{{runId}}@test.local\",\n  \"password\": \"secret\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
+          }
+        },
+        {
+          "name": "2. Admin Resets Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"newPassword\": \"newPass2026!\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{employeeId}}/password?actorId={{adminId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "{{employeeId}}", "password"],
+              "query": [{ "key": "actorId", "value": "{{adminId}}" }]
+            }
+          }
+        },
+        {
+          "name": "3. Login with New Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"test_emp_{{runId}}@test.local\",\n  \"password\": \"newPass2026!\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
+          }
+        },
+        {
+          "name": "4. Block User (via PUT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{employeeId}}/block?actorId={{adminId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "{{employeeId}}", "block"],
+              "query": [{ "key": "actorId", "value": "{{adminId}}" }]
+            }
+          }
+        },
+        {
+          "name": "5. Login as Blocked User (Expect 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                  "pm.test('Mentions blocked', () => pm.expect(pm.response.text()).to.match(/заблокирован/i));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"test_emp_{{runId}}@test.local\",\n  \"password\": \"newPass2026!\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Economy",
+      "item": [
+        {
+          "name": "1. Manager Grants Bonus",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Type is MANAGER_BONUS', () => pm.expect(pm.response.json().type).to.eql('MANAGER_BONUS'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"actorId\": {{managerId}},\n  \"toUserId\": {{employeeId}},\n  \"amount\": 500.00,\n  \"comment\": \"Bonus\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/transfers/grant", "host": ["{{baseUrl}}"], "path": ["api", "transfers", "grant"] }
+          }
+        },
+        {
+          "name": "2. Huge Bonus Fails (Treasury Empty)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                  "pm.test('Mentions treasury', () => pm.expect(pm.response.text()).to.match(/казн/i));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"actorId\": {{managerId}},\n  \"toUserId\": {{employeeId}},\n  \"amount\": 9999999.00,\n  \"comment\": \"Too much\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/transfers/grant", "host": ["{{baseUrl}}"], "path": ["api", "transfers", "grant"] }
+          }
+        },
+        {
+          "name": "3. Admin Applies Penalty",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"actorId\": {{adminId}},\n  \"userId\": {{employeeId}},\n  \"coins\": 100.00,\n  \"rating\": 2.0,\n  \"reason\": \"Violation\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/admin/penalties", "host": ["{{baseUrl}}"], "path": ["api", "admin", "penalties"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. Shop: Discounts & Write-Off",
+      "item": [
+        {
+          "name": "1. Create Category",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('catId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Test Category {{runId}}\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/categories?actorId={{adminId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shop", "categories"],
+              "query": [{ "key": "actorId", "value": "{{adminId}}" }]
+            }
+          }
+        },
+        {
+          "name": "2. Create Product with +10% Adjustment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('productId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Test Product {{runId}}\",\n  \"price\": 1000,\n  \"stock\": 10,\n  \"priceAdjustmentPercent\": 10,\n  \"categoryId\": {{catId}}\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/products?actorId={{adminId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shop", "products"],
+              "query": [{ "key": "actorId", "value": "{{adminId}}" }]
+            }
+          }
+        },
+        {
+          "name": "3. Create 20% Discount",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const now = new Date();",
+                  "const tomorrow = new Date(now.getTime() + 86400000);",
+                  "pm.collectionVariables.set('validFrom', now.toISOString());",
+                  "pm.collectionVariables.set('validTo', tomorrow.toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('201 Created', () => pm.response.to.have.status(201));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"percent\": 20,\n  \"validFrom\": \"{{validFrom}}\",\n  \"validTo\": \"{{validTo}}\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/products/{{productId}}/discount?actorId={{adminId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shop", "products", "{{productId}}", "discount"],
+              "query": [{ "key": "actorId", "value": "{{adminId}}" }]
+            }
+          }
+        },
+        {
+          "name": "4. Check Final Price (1000 → 1100 → 880)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const list = pm.response.json();",
+                  "const product = list.find(p => p.id === parseInt(pm.collectionVariables.get('productId')));",
+                  "pm.test('Product found', () => pm.expect(product).to.not.be.undefined);",
+                  "pm.test('Base price = 1000', () => pm.expect(parseFloat(product.basePrice)).to.eql(1000.00));",
+                  "pm.test('Adjusted price = 1100', () => pm.expect(parseFloat(product.adjustedPrice)).to.eql(1100.00));",
+                  "pm.test('Final price = 880', () => pm.expect(parseFloat(product.finalPrice)).to.eql(880.00));",
+                  "pm.test('On discount', () => pm.expect(product.isOnDiscount).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/shop/products", "host": ["{{baseUrl}}"], "path": ["api", "shop", "products"] }
+          }
+        },
+        {
+          "name": "5. Write-Off Stock",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"quantity\": 1,\n  \"reason\": \"GIFT\",\n  \"recipientId\": {{employeeId}},\n  \"comment\": \"Gift\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/products/{{productId}}/write-off?actorId={{adminId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shop", "products", "{{productId}}", "write-off"],
+              "query": [{ "key": "actorId", "value": "{{adminId}}" }]
+            }
+          }
+        },
+        {
+          "name": "6. Audit Logs Contain Actions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const logs = pm.response.json().content;",
+                  "pm.test('Has write-off', () => pm.expect(logs.some(l => l.action === 'STOCK_WRITTEN_OFF')).to.be.true);",
+                  "pm.test('Has discount', () => pm.expect(logs.some(l => l.action === 'DISCOUNT_CREATED')).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/audit-logs?actorId={{adminId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "shop", "audit-logs"],
+              "query": [{ "key": "actorId", "value": "{{adminId}}" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05. Two Ratings in Profile",
+      "item": [
+        {
+          "name": "Profile has currentRating and lifetimeRating",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const p = pm.response.json();",
+                  "pm.test('Has currentRating', () => pm.expect(p.currentRating).to.be.a('number'));",
+                  "pm.test('Has lifetimeRating', () => pm.expect(p.lifetimeRating).to.be.a('number'));",
+                  "pm.test('Has level', () => pm.expect(p.level).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users/{{employeeId}}/profile", "host": ["{{baseUrl}}"], "path": ["api", "users", "{{employeeId}}", "profile"] }
+          }
+        }
+      ]
+    }
+  ]
+}

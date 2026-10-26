@@ -2,9 +2,11 @@ package com.sprint.tms_backend.controller;
 
 import com.sprint.tms_backend.DTO.*;
 import com.sprint.tms_backend.model.Category;
+import com.sprint.tms_backend.model.Discount;
 import com.sprint.tms_backend.model.Product;
 import com.sprint.tms_backend.service.ShopService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -138,7 +140,7 @@ public class ShopController {
             @PathVariable Long id,
             @RequestParam Long actorId,
             @RequestBody CreateProductRequest request) {
-        return ResponseEntity.ok(shopService.updateProduct(id, request, actorId));
+        return ResponseEntity.ok(shopService.updateProduct(id, actorId, request));
     }
 
     @DeleteMapping("/products/{id}")
@@ -147,5 +149,33 @@ public class ShopController {
             @RequestParam Long actorId) {
         shopService.deleteProduct(id, actorId);
         return ResponseEntity.ok("Товар скрыт из каталога");
+    }
+
+    // === Логи магазина (для админа) ===
+    @GetMapping("/audit-logs")
+    public ResponseEntity<Page<ShopAuditLogDTO>> getAuditLogs(
+            @RequestParam Long actorId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        return ResponseEntity.ok(shopService.getAuditLogs(actorId, page, size));
+    }
+
+    // === Скидки ===
+    @PostMapping("/products/{productId}/discount")
+    public ResponseEntity<Discount> createDiscount(
+            @PathVariable Long productId,
+            @RequestParam Long actorId,
+            @RequestBody CreateDiscountRequest request) {
+        return new ResponseEntity<>(shopService.createDiscount(productId, actorId, request), HttpStatus.CREATED);
+    }
+
+    // === Списание стока ===
+    @PostMapping("/products/{productId}/write-off")
+    public ResponseEntity<String> writeOffStock(
+            @PathVariable Long productId,
+            @RequestParam Long actorId,
+            @RequestBody WriteOffStockRequest request) {
+        shopService.writeOffStock(productId, actorId, request);
+        return ResponseEntity.ok("Списание успешно выполнено");
     }
 }

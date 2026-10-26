@@ -4,5 +4,6 @@ public record LeaderboardEntryDTO(
         Integer place,
         Long userId,
         String userName,
-        Double rating
+        Double currentRating,   // Рейтинг в текущем сезоне (для лидерборда)
+        Double lifetimeRating   // Общая репутация (для доп. инфо)
 ) {}

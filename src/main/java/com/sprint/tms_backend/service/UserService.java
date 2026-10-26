@@ -29,23 +29,65 @@ public class UserService {
     private final UserAchievementRepository userAchievementRepository;
     private final SeasonService seasonService;
 
-    @Transactional
-    public User createUser(User user) {
-        if (userRepository.findByEmail(user.getEmail()).isPresent()) {
-            throw new RuntimeException("Пользователь с таким email существует");
-        }
-        if (user.getBalance() == null) {
-            user.setBalance(BigDecimal.ZERO);
-        }
-        if (user.getRating() == null) {
-            user.setRating(0.0);
-        }
-        // ДОБАВИТЬ ВОТ ЭТУ СТРОКУ:
-        if (user.getIsBlocked() == null) {
-            user.setIsBlocked(false);
+    // ==========================================
+    // === АВТОРИЗАЦИЯ ===
+    // ==========================================
+    @Transactional(readOnly = true)
+    public User login(String email, String password) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Неверный email или пароль"));
+
+        if (!user.getPassword().equals(password)) {
+            throw new RuntimeException("Неверный email или пароль");
         }
 
-        return userRepository.save(user);
+        if (Boolean.TRUE.equals(user.getIsBlocked())) {
+            throw new RuntimeException("Ваш аккаунт заблокирован. Обратитесь к администратору.");
+        }
+
+        return user;
+    }
+
+    // ==========================================
+    // === СОЗДАНИЕ И УПРАВЛЕНИЕ ===
+    // ==========================================
+    @Transactional
+    public User createUser(Long actorId, User newUser) {
+        // Если actorId нет — это БУТСТРАП (создание самого первого пользователя)
+        if (actorId == null) {
+            if (userRepository.count() > 0) {
+                throw new RuntimeException("Передан actorId=null, но база не пуста. Укажите создателя.");
+            }
+            // Разрешаем создать только ADMIN
+            if (newUser.getRole() != UserRole.ADMIN) {
+                throw new RuntimeException("Первый пользователь в системе должен быть ADMIN");
+            }
+        } else {
+            // Обычная проверка прав
+            User actor = userRepository.findById(actorId)
+                    .orElseThrow(() -> new RuntimeException("Создатель не найден"));
+
+            if (actor.getRole() != UserRole.ADMIN &&
+                    actor.getRole() != UserRole.HR &&
+                    actor.getRole() != UserRole.MANAGER) {
+                throw new SecurityException("Только HR, MANAGER или ADMIN могут создавать пользователей");
+            }
+        }
+
+        if (userRepository.findByEmail(newUser.getEmail()).isPresent()) {
+            throw new RuntimeException("Пользователь с таким email уже существует");
+        }
+        if (newUser.getPassword() == null || newUser.getPassword().trim().isEmpty()) {
+            throw new RuntimeException("Пароль обязателен при создании");
+        }
+
+        if (newUser.getBalance() == null) newUser.setBalance(BigDecimal.ZERO);
+        if (newUser.getRating() == null) newUser.setRating(0.0);
+        if (newUser.getLifetimeRating() == null) newUser.setLifetimeRating(0.0);
+        if (newUser.getIsBlocked() == null) newUser.setIsBlocked(false);
+        if (newUser.getMonthlyEarnedCoins() == null) newUser.setMonthlyEarnedCoins(BigDecimal.ZERO);
+
+        return userRepository.save(newUser);
     }
 
     @Transactional(readOnly = true)
@@ -59,25 +101,87 @@ public class UserService {
                 .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
     }
 
+    @Transactional
+    public void changeUserPassword(Long userId, String newPassword, Long actorId) {
+        User actor = userRepository.findById(actorId)
+                .orElseThrow(() -> new RuntimeException("Админ не найден"));
+
+        if (actor.getRole() != UserRole.ADMIN) {
+            throw new SecurityException("Только ADMIN может сбрасывать пароли");
+        }
+
+        if (newPassword == null || newPassword.trim().length() < 4) {
+            throw new RuntimeException("Новый пароль слишком короткий (минимум 4 символа)");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+
+        user.setPassword(newPassword);
+        userRepository.save(user);
+    }
+
+    @Transactional
+    public User updateUser(Long userId, UpdateUserRequest request, Long actorId) {
+        User actor = userRepository.findById(actorId).orElseThrow();
+        if (!actor.getRole().has(Permission.USER_MANAGE)) {
+            throw new SecurityException("Нет прав на редактирование");
+        }
+
+        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+        if (request.name() != null) user.setName(request.name());
+        if (request.email() != null) user.setEmail(request.email());
+
+        return userRepository.save(user);
+    }
+
+    @Transactional
+    public User changeUserRole(Long userId, UserRole newRole, Long actorId) {
+        User actor = userRepository.findById(actorId).orElseThrow();
+        if (actor.getRole() != UserRole.ADMIN) {
+            throw new SecurityException("Только ADMIN может менять роли");
+        }
+
+        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+        user.setRole(newRole);
+        return userRepository.save(user);
+    }
+
+    @Transactional
+    public User toggleBlockUser(Long userId, Long actorId) {
+        User actor = userRepository.findById(actorId).orElseThrow();
+        if (actor.getRole() != UserRole.ADMIN) {
+            throw new SecurityException("Только ADMIN может блокировать");
+        }
+
+        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+        user.setIsBlocked(!user.getIsBlocked());
+        return userRepository.save(user);
+    }
+
+    // ==========================================
+    // === ПРОФИЛЬ (С двумя рейтингами) ===
+    // ==========================================
     @Transactional(readOnly = true)
     public UserProfileResponseDTO getUserProfile(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
 
-        // 1. Расчет уровня
-        double rating = user.getRating() != null ? user.getRating() : 0.0;
+        // 1. Уровень считаем от LIFETIME (общей репутации за всё время)
+        double lifetimeRating = user.getLifetimeRating() != null ? user.getLifetimeRating() : 0.0;
         String level;
-        if (rating < 10) level = "Junior";
-        else if (rating < 50) level = "Middle";
-        else if (rating < 100) level = "Senior";
+        if (lifetimeRating < 10) level = "Junior";
+        else if (lifetimeRating < 50) level = "Middle";
+        else if (lifetimeRating < 100) level = "Senior";
         else level = "Legend";
 
-        // 2. Расчет места в общем рейтинге
-        long higherRatedCount = userRepository.countByRatingGreaterThan(rating);
+        // 2. Место считаем от ТЕКУЩЕГО рейтинга сезона
+        double currentRating = user.getRating() != null ? user.getRating() : 0.0;
+        long higherRatedCount = userRepository.countByRatingGreaterThan(currentRating);
         int currentPlace = (int) higherRatedCount + 1;
         long totalUsers = userRepository.count();
 
-        // 3. Информация о подразделении (ИСПРАВЛЕНО)
+        // 3. Подразделение
         Long departmentId = null;
         String departmentName = "Без подразделения";
         Integer departmentPlace = null;
@@ -89,26 +193,28 @@ public class UserService {
             try {
                 departmentPlace = seasonService.getDepartmentPlace(departmentId);
             } catch (Exception e) {
-                // Если сезон еще не начался, просто оставляем null
+                // Сезон еще не начался
             }
         }
 
-        // 4. История баланса (последние 3)
+        // 4. История баланса (3 шт)
         List<CoinTransactionDTO> recentBalance = coinTxRepository
                 .findHistoryByUser(userId, PageRequest.of(0, 3))
                 .map(t -> new CoinTransactionDTO(
                         t.getId(), t.getFromUserId(), t.getToUserId(), t.getAmount(),
-                        t.getType(), t.getComment(), t.getTag(), t.getCreatedAt()
+                        t.getType(), t.getComment(), t.getTag(),
+                        t.getIsCancelled(), t.getCancellationReason(),
+                        t.getCreatedAt()
                 )).getContent();
 
-        // 5. История рейтинга (последние 3)
+        // 5. История рейтинга (3 шт)
         List<RatingTransactionDTO> recentRating = ratingTxRepository
                 .findAllByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(0, 3))
                 .map(rt -> new RatingTransactionDTO(
                         rt.getId(), rt.getAmount(), rt.getReason(), rt.getCreatedAt()
                 )).getContent();
 
-        // 6. Последние заказы (5)
+        // 6. Последние 5 заказов
         List<UserProfileResponseDTO.OrderShortDTO> recentOrders = orderRepository
                 .findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(0, 5))
                 .map(o -> new UserProfileResponseDTO.OrderShortDTO(
@@ -116,22 +222,22 @@ public class UserService {
                         o.getTotalPrice(), o.getStatus(), o.getAdminComment()
                 )).getContent();
 
-        // 7. Статистика по событиям
+        // 7. Статистика событий
         long organizedEvents = eventRepository.countByOrganizerId(userId);
         long participatedEvents = participantRepository.countByUserId(userId);
 
         // 8. Сгруппированные ачивки
         List<AchievementProfileDTO> achievementsProfile = buildGroupedAchievements(userId);
 
-        // 9. Сборка итогового DTO
         return new UserProfileResponseDTO(
                 user.getId(),
                 user.getName(),
                 user.getEmail(),
                 user.getRole(),
                 user.getBalance(),
-                user.getRating(),
-                level,
+                currentRating,      // Текущий рейтинг сезона
+                lifetimeRating,     // Общая репутация
+                level,              // От lifetimeRating
                 currentPlace,
                 totalUsers,
                 departmentId,
@@ -146,26 +252,25 @@ public class UserService {
         );
     }
 
-    // Вспомогательный метод для группировки ачивок
-    // Вспомогательный метод для группировки ачивок
+    // ==========================================
+    // === ВСПОМОГАТЕЛЬНЫЙ МЕТОД (ачивки) ===
+    // ==========================================
     private List<AchievementProfileDTO> buildGroupedAchievements(Long userId) {
         List<Achievement> allAchievements = achievementRepository.findAll();
 
         Map<Long, UserAchievement> earnedMap = userAchievementRepository.findByUserId(userId).stream()
                 .collect(Collectors.toMap(ua -> ua.getAchievement().getId(), ua -> ua));
 
-        // Группируем по groupCode, а если его нет — по code (чтобы одиночные ачивки тоже показывались)
         Map<String, List<Achievement>> grouped = allAchievements.stream()
-                .collect(Collectors.groupingBy(a -> a.getGroupCode() != null ? a.getGroupCode() : a.getCode()));
+                .filter(a -> a.getGroupCode() != null)
+                .collect(Collectors.groupingBy(Achievement::getGroupCode));
 
         List<AchievementProfileDTO> result = new ArrayList<>();
 
         for (var entry : grouped.entrySet()) {
             String groupCode = entry.getKey();
             List<Achievement> levels = entry.getValue();
-
-            // Сортируем уровни (если level null, считаем 1)
-            levels.sort(Comparator.comparing(a -> a.getLevel() != null ? a.getLevel() : 1));
+            levels.sort(Comparator.comparing(Achievement::getLevel));
 
             List<AchievementProfileDTO.LevelDetail> levelDetails = new ArrayList<>();
             boolean anyEarned = false;
@@ -176,7 +281,7 @@ public class UserService {
                 if (isEarned) anyEarned = true;
 
                 levelDetails.add(new AchievementProfileDTO.LevelDetail(
-                        lvl.getLevel() != null ? lvl.getLevel() : 1,
+                        lvl.getLevel(),
                         lvl.getName(),
                         isEarned,
                         isEarned ? earned.getEarnedAt() : null
@@ -194,47 +299,5 @@ public class UserService {
             ));
         }
         return result;
-    }
-
-    // Обновление данных (Админ или HR)
-    @Transactional
-    public User updateUser(Long userId, UpdateUserRequest request, Long actorId) {
-        User actor = userRepository.findById(actorId).orElseThrow();
-        if (!actor.getRole().has(Permission.USER_MANAGE)) {
-            throw new SecurityException("Нет прав на редактирование пользователей");
-        }
-
-        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("Пользователь не найден"));
-        if (request.name() != null) user.setName(request.name());
-        if (request.email() != null) user.setEmail(request.email());
-        if (request.password() != null) user.setPassword(request.password());
-
-        return userRepository.save(user);
-    }
-
-    // Смена роли (Только ADMIN)
-    @Transactional
-    public User changeUserRole(Long userId, UserRole newRole, Long actorId) {
-        User actor = userRepository.findById(actorId).orElseThrow();
-        if (actor.getRole() != UserRole.ADMIN) {
-            throw new SecurityException("Только ADMIN может менять роли");
-        }
-
-        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("Пользователь не найден"));
-        user.setRole(newRole);
-        return userRepository.save(user);
-    }
-
-    // Блокировка/Разблокировка (Только ADMIN)
-    @Transactional
-    public User toggleBlockUser(Long userId, Long actorId) {
-        User actor = userRepository.findById(actorId).orElseThrow();
-        if (actor.getRole() != UserRole.ADMIN) {
-            throw new SecurityException("Только ADMIN может блокировать пользователей");
-        }
-
-        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("Пользователь не найден"));
-        user.setIsBlocked(!user.getIsBlocked());
-        return userRepository.save(user);
     }
 }

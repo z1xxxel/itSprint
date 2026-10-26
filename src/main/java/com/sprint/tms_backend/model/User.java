@@ -8,6 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "users")
@@ -48,4 +49,13 @@ public class User {
     // В классе User добавьте поле:
     @Column(nullable = false)
     private Boolean isBlocked = false;
+
+    // Репутация за всё время (не сбрасывается)
+    private Double lifetimeRating = 0.0;
+
+    // Контроль месячного лимита
+    @Column(precision = 19, scale = 2)
+    private BigDecimal monthlyEarnedCoins = BigDecimal.ZERO;
+
+    private LocalDateTime lastMonthlyReset;
 }

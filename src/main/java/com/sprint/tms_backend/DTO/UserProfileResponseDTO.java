@@ -12,30 +12,25 @@ public record UserProfileResponseDTO(
         String email,
         UserRole role,
         BigDecimal balance,
-        Double rating,
-        String level,
 
-        // Место в общем рейтинге
-        Integer currentPlace,
+        // ⬇️ ДВА РЕЙТИНГА
+        Double currentRating,     // Текущий сезон (сбрасывается)
+        Double lifetimeRating,    // Репутация (навсегда)
+        String level,             // Уровень (считается от lifetimeRating)
+
+        Integer currentPlace,     // Место в текущем сезоне
         Long totalUsers,
 
-        // Информация о подразделении
-        Long departmentId,        // <--- ДОБАВЛЕНО
-        String departmentName,    // <--- ДОБАВЛЕНО
-        Integer departmentPlace,  // <--- ДОБАВЛЕНО
+        Long departmentId,
+        String departmentName,
+        Integer departmentPlace,
 
-        // Статистика
         long organizedEventsCount,
         long participatedEventsCount,
 
-        // История (для графиков и блока последних изменений)
         List<RatingTransactionDTO> recentRatingTransactions,
         List<CoinTransactionDTO> recentBalanceTransactions,
-
-        // Последние заказы
         List<OrderShortDTO> recentOrders,
-
-        // Сгруппированные ачивки
         List<AchievementProfileDTO> achievements
 ) {
     public record OrderShortDTO(

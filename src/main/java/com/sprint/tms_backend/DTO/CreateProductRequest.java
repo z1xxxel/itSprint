@@ -5,10 +5,9 @@ import java.math.BigDecimal;
 public record CreateProductRequest(
         String name,
         String description,
-        BigDecimal price,
+        BigDecimal price,                 // Базовая цена
+        Integer priceAdjustmentPercent,   // Наценка/уценка
         Integer stock,
         String imageUrl,
-        Long categoryId,
-        Boolean isSpecialOffer,   // <--- ДОБАВЛЕНО
-        Integer discountPercent   // <--- ДОБАВЛЕНО
+        Long categoryId
 ) {}

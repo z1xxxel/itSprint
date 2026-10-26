@@ -9,5 +9,6 @@ public enum CoinTransactionType {
     ADMIN_ADJUSTMENT,
     REFUND,
     SEASON_REWARD,
-    QUEST_REWARD// <--- НОВОЕ
+    QUEST_REWARD,
+    PENALTY // <--- ДОБАВЛЕНО (штраф)
 }

@@ -31,30 +31,41 @@ public class SeasonService {
 
     // Награды (общий лидерборд)
     private static final BigDecimal[] REWARDS = {
-            new BigDecimal("5000"), new BigDecimal("2500"), new BigDecimal("1000")
+            new BigDecimal("7000"), // 1 место
+            new BigDecimal("4000"), // 2 место
+            new BigDecimal("3000")  // 3 место
     };
 
     // Награда каждому участнику выигравшего подразделения
-    private static final BigDecimal WINNING_DEPT_REWARD = new BigDecimal("50");
+    private static final BigDecimal WINNING_DEPT_REWARD = new BigDecimal("5000");
 
+    // ==========================================
+    // === ИНФОРМАЦИЯ О ТЕКУЩЕМ СЕЗОНЕ ===
+    // ==========================================
     @Transactional
     public SeasonInfoDTO getCurrentSeasonInfo(Long currentUserId) {
         Season currentSeason = getOrCreateCurrentSeason();
 
-        // 1. Индивидуальный лидерборд (ВСЕ пользователи)
+        // 1. Индивидуальный лидерборд (по текущему рейтингу)
         List<User> allUsers = userRepository.findAllByOrderByRatingDesc();
         List<LeaderboardEntryDTO> currentLeaderboard = new ArrayList<>();
         int place = 1;
         for (User u : allUsers) {
             if (u.getRating() != null && u.getRating() > 0) {
-                currentLeaderboard.add(new LeaderboardEntryDTO(place++, u.getId(), u.getName(), u.getRating()));
+                currentLeaderboard.add(new LeaderboardEntryDTO(
+                        place++,
+                        u.getId(),
+                        u.getName(),
+                        u.getRating(),
+                        u.getLifetimeRating() != null ? u.getLifetimeRating() : 0.0
+                ));
             }
         }
 
-        // 2. Командный лидерборд (места отделов)
+        // 2. Командный лидерборд
         List<DepartmentLeaderboardEntryDTO> deptLeaderboard = buildDepartmentLeaderboard();
 
-        // 3. Внутренний лидерборд подразделения текущего пользователя
+        // 3. Внутренний лидерборд подразделения
         String myDeptName = "Без подразделения";
         Integer myDeptPlace = null;
         List<LeaderboardEntryDTO> myDeptLeaderboard = new ArrayList<>();
@@ -65,20 +76,24 @@ public class SeasonService {
                 Department myDept = currentUser.getDepartment();
                 myDeptName = myDept.getName();
 
-                // Ищем место отдела
                 final Long deptId = myDept.getId();
                 myDeptPlace = deptLeaderboard.stream()
                         .filter(d -> d.departmentId().equals(deptId))
                         .map(DepartmentLeaderboardEntryDTO::place)
                         .findFirst().orElse(null);
 
-                // Строим рейтинг сотрудников ВНУТРИ отдела
                 List<User> deptUsers = userRepository.findByDepartmentId(deptId);
                 deptUsers.sort(Comparator.comparing((User u) -> u.getRating() != null ? u.getRating() : 0.0).reversed());
                 int deptPlace = 1;
                 for (User u : deptUsers) {
                     if (u.getRating() != null && u.getRating() > 0) {
-                        myDeptLeaderboard.add(new LeaderboardEntryDTO(deptPlace++, u.getId(), u.getName(), u.getRating()));
+                        myDeptLeaderboard.add(new LeaderboardEntryDTO(
+                                deptPlace++,
+                                u.getId(),
+                                u.getName(),
+                                u.getRating(),
+                                u.getLifetimeRating() != null ? u.getLifetimeRating() : 0.0
+                        ));
                     }
                 }
             }
@@ -109,6 +124,9 @@ public class SeasonService {
         );
     }
 
+    // ==========================================
+    // === КОМАНДНЫЙ ЛИДЕРБОРД ===
+    // ==========================================
     private List<DepartmentLeaderboardEntryDTO> buildDepartmentLeaderboard() {
         List<Department> departments = departmentRepository.findAll();
         List<DepartmentLeaderboardEntryDTO> result = new ArrayList<>();
@@ -126,10 +144,16 @@ public class SeasonService {
         int place = 1;
         for (DeptScore s : scores) {
             if (s.memberCount() == 0) continue;
-            result.add(new DepartmentLeaderboardEntryDTO(place++, s.dept().getId(), s.dept().getName(), s.totalRating(), s.memberCount()));
+            result.add(new DepartmentLeaderboardEntryDTO(
+                    place++, s.dept().getId(), s.dept().getName(), s.totalRating(), s.memberCount()
+            ));
         }
         return result;
     }
+
+    // ==========================================
+    // === ПРОСТЫЕ ГЕТТЕРЫ ===
+    // ==========================================
     @Transactional(readOnly = true)
     public Integer getDepartmentPlace(Long departmentId) {
         List<DepartmentLeaderboardEntryDTO> board = buildDepartmentLeaderboard();
@@ -147,7 +171,13 @@ public class SeasonService {
         int place = 1;
         for (User u : allUsers) {
             if (u.getRating() != null && u.getRating() > 0) {
-                leaderboard.add(new LeaderboardEntryDTO(place++, u.getId(), u.getName(), u.getRating()));
+                leaderboard.add(new LeaderboardEntryDTO(
+                        place++,
+                        u.getId(),
+                        u.getName(),
+                        u.getRating(),
+                        u.getLifetimeRating() != null ? u.getLifetimeRating() : 0.0
+                ));
             }
         }
         return leaderboard;
@@ -179,11 +209,17 @@ public class SeasonService {
                             m.getPlaceInDepartment(), m.getUserName(), m.getFinalRating(), BigDecimal.ZERO
                     )).toList();
 
-            result.add(new DepartmentResultDTO(dr.getPlace(), dr.getDepartmentName(), dr.getTotalRating(), dr.getMemberCount(), dr.getRewardCoinsPerMember(), topMembers));
+            result.add(new DepartmentResultDTO(
+                    dr.getPlace(), dr.getDepartmentName(), dr.getTotalRating(),
+                    dr.getMemberCount(), dr.getRewardCoinsPerMember(), topMembers
+            ));
         }
         return result;
     }
 
+    // ==========================================
+    // === СОЗДАНИЕ СЕЗОНА ===
+    // ==========================================
     @Transactional
     public Season getOrCreateCurrentSeason() {
         return seasonRepository.findByIsActiveTrue().orElseGet(() -> {
@@ -202,6 +238,9 @@ public class SeasonService {
         });
     }
 
+    // ==========================================
+    // === ЗАКРЫТИЕ СЕЗОНА (Планировщик) ===
+    // ==========================================
     @Transactional
     public void closeExpiredSeasons() {
         List<Season> expired = seasonRepository.findByIsActiveTrueAndEndDateBefore(LocalDateTime.now());
@@ -222,7 +261,7 @@ public class SeasonService {
         createNextSeason(season);
     }
 
-    // === 1. Общие награды (не изменилось) ===
+    // Индивидуальные награды
     private void awardIndividualWinners(Season season) {
         List<User> usersByRating = userRepository.findAllByOrderByRatingDesc();
         int rewardPlaces = Math.min(REWARDS.length, usersByRating.size());
@@ -252,7 +291,7 @@ public class SeasonService {
         }
     }
 
-    // === 2. Командные награды (изменено) ===
+    // Командные награды
     private void awardDepartmentWinners(Season season) {
         List<Department> departments = departmentRepository.findAll();
         record DeptData(Department dept, List<User> members, double totalRating) {}
@@ -268,15 +307,15 @@ public class SeasonService {
         if (deptDataList.isEmpty()) return;
         deptDataList.sort(Comparator.comparingDouble(DeptData::totalRating).reversed());
 
-        // Победившее подразделение получает по 50 монет каждому участнику
+        // Победившее подразделение получает по 5000 монет каждому участнику
         DeptData winner = deptDataList.get(0);
         if (winner.totalRating() > 0) {
             for (User member : winner.members()) {
-                addCoinsAndLog(member, WINNING_DEPT_REWARD, "Бонус за победу подразделения «" + winner.dept().getName() + "» в сезоне " + season.getName());
+                addCoinsAndLog(member, WINNING_DEPT_REWARD,
+                        "Бонус за победу подразделения «" + winner.dept().getName() + "» в сезоне " + season.getName());
             }
         }
 
-        // Сохраняем результат каждого отдела + выдаем ачивки топ-3
         int deptPlace = 1;
         for (DeptData dd : deptDataList) {
             DepartmentResult dr = new DepartmentResult();
@@ -307,27 +346,32 @@ public class SeasonService {
                 dmr.setFinalRating(member.getRating());
                 departmentMemberResultRepository.save(dmr);
 
-                // ВЫДАЕМ АЧИВКИ ЗА ТОП ВНУТРИ ОТДЕЛА
                 try {
-                    String achievementCode = "DEPT_TOP_" + (i + 1);
-                    achievementService.grantAchievementByCode(member.getId(), achievementCode);
+                    achievementService.grantAchievementByCode(member.getId(), "DEPT_TOP_" + (i + 1));
                 } catch (Exception e) {
-                    log.error("Ошибка при выдаче ачивки {} пользователю {}", "DEPT_TOP_" + (i + 1), member.getId(), e);
+                    log.error("Ошибка при выдаче ачивки DEPT_TOP_{} пользователю {}", i + 1, member.getId(), e);
                 }
             }
             deptPlace++;
         }
     }
 
+    // Сброс рейтинга (перенос в lifetimeRating)
     private void resetAllRatings(Season season) {
         for (User user : userRepository.findAll()) {
             if (user.getRating() != null && user.getRating() > 0) {
+                // 1. Логируем сброс
                 RatingTransaction rt = new RatingTransaction();
                 rt.setUserId(user.getId());
                 rt.setAmount(-user.getRating());
                 rt.setReason("Сброс рейтинга после сезона " + season.getName());
                 ratingTxRepository.save(rt);
 
+                // 2. Переносим в общую репутацию (не сгорает)
+                double lifetime = user.getLifetimeRating() != null ? user.getLifetimeRating() : 0.0;
+                user.setLifetimeRating(lifetime + user.getRating());
+
+                // 3. Обнуляем текущий рейтинг сезона
                 user.setRating(0.0);
                 userRepository.save(user);
             }
@@ -358,5 +402,6 @@ public class SeasonService {
         next.setEndDate(nextStart.plusMonths(3).minusDays(1).withHour(23).withMinute(59).withSecond(59));
         next.setIsActive(true);
         seasonRepository.save(next);
+        log.info("Создан новый сезон: {}", next.getName());
     }
 }

@@ -21,8 +21,10 @@ public class QuestService {
     private final UserQuestRepository userQuestRepository;
     private final UserRepository userRepository;
     private final CoinTransactionRepository coinTxRepository;
+    private final TreasuryService treasuryService;
+    private final EconomyLimitService economyLimitService; // <--- ДОБАВЛЕНО
 
-    // === СОЗДАНИЕ И УДАЛЕНИЕ (Менеджер/Админ) ===
+    // === СОЗДАНИЕ И УДАЛЕНИЕ ===
     @Transactional
     public Quest createQuest(CreateQuestRequest request) {
         User creator = userRepository.findById(request.creatorId())
@@ -58,12 +60,11 @@ public class QuestService {
         Quest quest = questRepository.findById(questId)
                 .orElseThrow(() -> new RuntimeException("Квест не найден"));
 
-        // Мягкое удаление, чтобы не сломать историю
         quest.setIsActive(false);
         questRepository.save(quest);
     }
 
-    // === ПРОСМОТР КВЕСТОВ (Сотрудник) ===
+    // === ПРОСМОТР И ПРОХОЖДЕНИЕ ===
     @Transactional(readOnly = true)
     public List<QuestResponseDTO> getAvailableQuests(Long userId) {
         List<Quest> activeQuests = questRepository.findByIsActiveTrue();
@@ -71,8 +72,6 @@ public class QuestService {
 
         for (Quest q : activeQuests) {
             UserQuest progress = userQuestRepository.findByUserIdAndQuestId(userId, q.getId()).orElse(null);
-
-            // Показываем квест, если он не выполнен (или выполнен, но хотим показывать историю)
             QuestProgressStatus status = progress != null ? progress.getStatus() : null;
             String comment = progress != null ? progress.getAdminComment() : null;
 
@@ -84,7 +83,6 @@ public class QuestService {
         return result;
     }
 
-    // === ВЗЯТЬ КВЕСТ ===
     @Transactional
     public void startQuest(Long questId, Long userId) {
         Quest quest = questRepository.findById(questId)
@@ -108,7 +106,6 @@ public class QuestService {
         userQuestRepository.save(userQuest);
     }
 
-    // === СДАТЬ КВЕСТ НА ПРОВЕРКУ ===
     @Transactional
     public void submitQuest(Long questId, Long userId) {
         UserQuest userQuest = userQuestRepository.findByUserIdAndQuestId(userId, questId)
@@ -120,11 +117,11 @@ public class QuestService {
 
         userQuest.setStatus(QuestProgressStatus.PENDING_REVIEW);
         userQuest.setSubmittedAt(LocalDateTime.now());
-        userQuest.setAdminComment(null); // Сбрасываем старый комментарий при повторной сдаче
+        userQuest.setAdminComment(null);
         userQuestRepository.save(userQuest);
     }
 
-    // === ПРОВЕРКА КВЕСТОВ (Менеджер/HR) ===
+    // === ПРОВЕРКА КВЕСТОВ (Менеджер) ===
     @Transactional(readOnly = true)
     public List<UserQuest> getQuestsForReview(Long actorId) {
         User actor = userRepository.findById(actorId)
@@ -135,7 +132,6 @@ public class QuestService {
         return userQuestRepository.findByStatus(QuestProgressStatus.PENDING_REVIEW);
     }
 
-    // === ПОДТВЕРДИТЬ ВЫПОЛНЕНИЕ (Начислить монеты) ===
     @Transactional
     public void approveQuest(Long userQuestId, Long actorId) {
         checkManagerRights(actorId);
@@ -147,14 +143,20 @@ public class QuestService {
             throw new RuntimeException("Квест не находится на проверке");
         }
 
+        User user = userQuest.getUser();
+        BigDecimal reward = userQuest.getQuest().getRewardCoins();
+
+        // ПРОВЕРКА МЕСЯЧНОГО ЛИМИТА
+        economyLimitService.checkMonthlyLimit(user, reward);
+
+        // СПИСЫВАЕМ ИЗ КАЗНЫ (только после успешной проверки лимита)
+        treasuryService.withdraw(reward);
+
         userQuest.setStatus(QuestProgressStatus.COMPLETED);
         userQuest.setCompletedAt(LocalDateTime.now());
         userQuestRepository.save(userQuest);
 
         // Начисляем монеты пользователю
-        User user = userQuest.getUser();
-        BigDecimal reward = userQuest.getQuest().getRewardCoins();
-
         BigDecimal currentBalance = user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO;
         user.setBalance(currentBalance.add(reward));
         userRepository.save(user);
@@ -169,7 +171,6 @@ public class QuestService {
         coinTxRepository.save(tx);
     }
 
-    // === ОТКЛОНИТЬ (Вернуть на доработку) ===
     @Transactional
     public void rejectQuest(Long userQuestId, Long actorId, String reason) {
         checkManagerRights(actorId);

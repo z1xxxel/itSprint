@@ -1,12 +1,14 @@
 package com.sprint.tms_backend.service;
 
 import com.sprint.tms_backend.model.EventStatus;
+import com.sprint.tms_backend.model.Treasury;
 import com.sprint.tms_backend.repository.EventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -56,6 +58,23 @@ public class EventSchedulerService {
             seasonService.closeExpiredSeasons();
         } catch (Exception e) {
             log.error("Ошибка при закрытии сезонов", e);
+        }
+    }
+
+    private final TreasuryService treasuryService;
+
+    // Запускается 1-го числа каждого месяца в 00:00
+    @Scheduled(cron = "0 0 0 1 * *")
+    public void refillTreasuryMonthly() {
+        log.info("Запуск ежемесячного пополнения Казны...");
+
+        Treasury current = treasuryService.getTreasury();
+
+        // Если HR забыл пополнить казну и она пуста (или почти пуста)
+        if (current.getBalance().compareTo(new BigDecimal("1000")) < 0) {
+            BigDecimal defaultBudget = new BigDecimal("50000.00"); // Лимит по умолчанию
+            treasuryService.fundTreasury(defaultBudget);
+            log.info("Казна автоматически пополнена на сумму по умолчанию: {}", defaultBudget);
         }
     }
 }

@@ -24,15 +24,16 @@ public class TransferService {
     private final UserRepository userRepository;
     private final CoinTransactionRepository coinTxRepository;
     private final TransferLimits limits;
+    private final TreasuryService treasuryService;
+    private final EconomyLimitService economyLimitService; // <--- ДОБАВЛЕНО
 
-    // === 1. Peer-to-peer перевод (сотрудник → сотруднику) ===
+    // === 1. Peer-to-peer перевод (сотрудник → сотруднику). НЕ считается заработком! ===
     @Transactional
     public CoinTransaction transferCoins(Long fromUserId, Long toUserId,
                                          BigDecimal amount, String comment, ThanksTag tag) {
 
         validateBasic(fromUserId, toUserId, amount);
 
-        // Блокировки в детерминированном порядке — защита от deadlock
         User fromUser;
         User toUser;
         if (fromUserId.compareTo(toUserId) < 0) {
@@ -43,7 +44,6 @@ public class TransferService {
             fromUser = lockUser(fromUserId, "Отправитель не найден");
         }
 
-        // Лимиты peer-to-peer
         LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
 
         BigDecimal sentToUser = coinTxRepository.sumSentBetween(
@@ -62,7 +62,6 @@ public class TransferService {
                             + ". Уже отправлено сегодня: " + sentTotal);
         }
 
-        // Баланс
         BigDecimal fromBalance = safeBalance(fromUser);
         if (fromBalance.compareTo(amount) < 0) {
             throw new InsufficientFundsException("Недостаточно средств на балансе");
@@ -77,11 +76,11 @@ public class TransferService {
         tx.setAmount(amount);
         tx.setType(CoinTransactionType.PEER_THANKS);
         tx.setComment(comment);
-        tx.setTag(tag); // <-- СОХРАНЯЕМ ENUM ТЕГ
+        tx.setTag(tag);
         return coinTxRepository.save(tx);
     }
 
-    // === 2. Списание (для магазина) ===
+    // === 2. Списание (для магазина). НЕ считается заработком! ===
     @Transactional
     public CoinTransaction spendCoins(Long userId, BigDecimal amount, String comment) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
@@ -97,14 +96,14 @@ public class TransferService {
 
         CoinTransaction tx = new CoinTransaction();
         tx.setFromUserId(userId);
-        tx.setToUserId(null); // Сжигание монет
+        tx.setToUserId(null);
         tx.setAmount(amount);
         tx.setType(CoinTransactionType.PURCHASE);
         tx.setComment(comment);
         return coinTxRepository.save(tx);
     }
 
-    // === 3. Grant: MANAGER → подчинённому, ADMIN → любому ===
+    // === 3. Grant: MANAGER → подчинённому, ADMIN → любому. Считается заработком! ===
     @Transactional
     public CoinTransaction grantCoins(Long actorId, Long toUserId,
                                       BigDecimal amount, String comment) {
@@ -130,10 +129,10 @@ public class TransferService {
         } else if (actor.getRole().has(Permission.COIN_GRANT_SUBORDINATE)) {
             type = CoinTransactionType.MANAGER_BONUS;
 
-            // Лимиты MANAGER
             LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
 
-            BigDecimal sentToUser = coinTxRepository.sumSentBetween(actorId, toUserId, type, startOfDay);
+            BigDecimal sentToUser = coinTxRepository.sumSentBetween(
+                    actorId, toUserId, type, startOfDay);
             if (sentToUser.add(amount).compareTo(limits.getManager().getDailyPerSubordinate()) > 0) {
                 throw new InvalidTransferException(
                         "Дневной лимит бонусов одному сотруднику: "
@@ -151,11 +150,17 @@ public class TransferService {
             throw new SecurityException("Нет прав на начисление бонусов");
         }
 
+        // ПРОВЕРКА МЕСЯЧНОГО ЛИМИТА (перед начислением)
+        economyLimitService.checkMonthlyLimit(toUser, amount);
+
+        // СПИСЫВАЕМ ИЗ КАЗНЫ
+        treasuryService.withdraw(amount);
+
         toUser.setBalance(safeBalance(toUser).add(amount));
         userRepository.save(toUser);
 
         CoinTransaction tx = new CoinTransaction();
-        tx.setFromUserId(null);  // эмиссия
+        tx.setFromUserId(null);
         tx.setToUserId(toUserId);
         tx.setAmount(amount);
         tx.setType(type);
@@ -166,7 +171,6 @@ public class TransferService {
     }
 
     // === helpers ===
-
     private void validateBasic(Long fromUserId, Long toUserId, BigDecimal amount) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new InvalidTransferException("Сумма перевода должна быть положительной");

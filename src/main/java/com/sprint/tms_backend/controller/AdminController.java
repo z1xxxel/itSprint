@@ -1,20 +1,10 @@
 package com.sprint.tms_backend.controller;
 
-import com.sprint.tms_backend.DTO.AdminDashboardDTO;
-import com.sprint.tms_backend.DTO.AdminQuestDTO;
-import com.sprint.tms_backend.DTO.CoinTransactionDTO;
-import com.sprint.tms_backend.DTO.SupportTicketDTO;
-import com.sprint.tms_backend.model.Permission;
-import com.sprint.tms_backend.model.Quest;
+import com.sprint.tms_backend.DTO.*;
 import com.sprint.tms_backend.model.SystemSetting;
-import com.sprint.tms_backend.model.User;
-import com.sprint.tms_backend.repository.CoinTransactionRepository;
-import com.sprint.tms_backend.repository.SystemSettingRepository;
-import com.sprint.tms_backend.repository.UserRepository;
 import com.sprint.tms_backend.service.AdminService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -25,59 +15,81 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AdminController {
 
-    private final CoinTransactionRepository coinTxRepository;
-    private final UserRepository userRepository;
     private final AdminService adminService;
-
-    @GetMapping("/transactions")
-    public ResponseEntity<Page<CoinTransactionDTO>> getAllTransactions(
-            @RequestParam Long actorId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size) {
-
-        User actor = userRepository.findById(actorId)
-                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
-
-        // Только HR или ADMIN могут смотреть глобальную экономику
-        if (!actor.getRole().has(Permission.USER_MANAGE) && actor.getRole() != com.sprint.tms_backend.model.UserRole.ADMIN) {
-            throw new SecurityException("Нет прав на просмотр глобальной истории");
-        }
-
-        Page<CoinTransactionDTO> result = coinTxRepository
-                .findAllByOrderByCreatedAtDesc(PageRequest.of(page, size))
-                .map(t -> new CoinTransactionDTO(
-                        t.getId(), t.getFromUserId(), t.getToUserId(), t.getAmount(),
-                        t.getType(), t.getComment(), t.getTag(), t.getCreatedAt()
-                ));
-
-        return ResponseEntity.ok(result);
-    }
 
     @GetMapping("/dashboard")
     public ResponseEntity<AdminDashboardDTO> getDashboard(@RequestParam Long actorId) {
         return ResponseEntity.ok(adminService.getDashboard(actorId));
     }
 
+    // --- Настройки ---
     @GetMapping("/settings")
     public ResponseEntity<List<SystemSetting>> getSettings(@RequestParam Long actorId) {
         return ResponseEntity.ok(adminService.getSettings(actorId));
     }
 
     @PutMapping("/settings/{key}")
-    public ResponseEntity<SystemSetting> updateSetting(
-            @PathVariable String key,
-            @RequestParam String value,
-            @RequestParam Long actorId) {
+    public ResponseEntity<SystemSetting> updateSetting(@PathVariable String key, @RequestParam String value, @RequestParam Long actorId) {
         return ResponseEntity.ok(adminService.updateSetting(key, value, actorId));
     }
 
+    // --- Тикеты ---
     @GetMapping("/tickets")
     public ResponseEntity<List<SupportTicketDTO>> getAllTickets(@RequestParam Long actorId) {
         return ResponseEntity.ok(adminService.getAllTickets(actorId));
     }
 
+    // --- Квесты ---
     @GetMapping("/quests")
     public ResponseEntity<List<AdminQuestDTO>> getAllQuests(@RequestParam Long actorId) {
         return ResponseEntity.ok(adminService.getAllQuests(actorId));
+    }
+
+    @GetMapping("/quests/pending")
+    public ResponseEntity<List<AdminQuestDTO>> getPendingQuests(@RequestParam Long actorId) {
+        return ResponseEntity.ok(adminService.getPendingQuests(actorId));
+    }
+
+    @PutMapping("/quests/{id}/approve")
+    public ResponseEntity<String> approveQuest(@PathVariable Long id, @RequestParam Long actorId) {
+        adminService.approveQuest(id, actorId);
+        return ResponseEntity.ok("Квест одобрен");
+    }
+
+    @PutMapping("/quests/{id}/reject")
+    public ResponseEntity<String> rejectQuest(@PathVariable Long id, @RequestParam Long actorId, @RequestParam String reason) {
+        adminService.rejectQuest(id, actorId, reason);
+        return ResponseEntity.ok("Квест отклонен");
+    }
+
+    // ОТМЕНА УЖЕ ЗАВЕРШЕННОГО КВЕСТА
+    @PutMapping("/quests/{id}/cancel-completed")
+    public ResponseEntity<String> cancelCompletedQuest(
+            @PathVariable Long id,
+            @RequestParam Long actorId,
+            @RequestParam String reason) {
+        adminService.cancelCompletedQuest(id, actorId, reason);
+        return ResponseEntity.ok("Выполненный квест отменен, средства возвращены в казну");
+    }
+
+    // --- Транзакции и Штрафы ---
+    @GetMapping("/transactions")
+    public ResponseEntity<Page<CoinTransactionDTO>> getAllTransactions(
+            @RequestParam Long actorId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "50") int size) {
+        return ResponseEntity.ok(adminService.getAllTransactions(actorId, page, size));
+    }
+
+    @PutMapping("/transactions/{id}/cancel")
+    public ResponseEntity<String> cancelTransaction(
+            @PathVariable Long id, @RequestParam Long actorId, @RequestParam String reason) {
+        adminService.cancelTransaction(id, actorId, reason);
+        return ResponseEntity.ok("Транзакция отменена");
+    }
+
+    // НАЛОЖЕНИЕ ШТРАФА
+    @PostMapping("/penalties")
+    public ResponseEntity<String> applyPenalty(@RequestBody PenaltyRequest request) {
+        adminService.applyPenalty(request);
+        return ResponseEntity.ok("Штраф успешно применен");
     }
 }

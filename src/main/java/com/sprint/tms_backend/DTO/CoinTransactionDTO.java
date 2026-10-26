@@ -12,6 +12,8 @@ public record CoinTransactionDTO(
         BigDecimal amount,
         CoinTransactionType type,
         String comment,
-        ThanksTag tag, // <--- ДОБАВЛЕНО
+        ThanksTag tag,
+        Boolean isCancelled,       // <--- ДОБАВЛЕНО
+        String cancellationReason, // <--- ДОБАВЛЕНО
         LocalDateTime createdAt
 ) {}

@@ -11,23 +11,18 @@ public record UserProfileResponseDTO(
         String name,
         String email,
         UserRole role,
+        String avatarUrl,             // ← ДОБАВИТЬ
         BigDecimal balance,
-
-        // ⬇️ ДВА РЕЙТИНГА
-        Double currentRating,     // Текущий сезон (сбрасывается)
-        Double lifetimeRating,    // Репутация (навсегда)
-        String level,             // Уровень (считается от lifetimeRating)
-
-        Integer currentPlace,     // Место в текущем сезоне
+        Double currentRating,
+        Double lifetimeRating,
+        String level,
+        Integer currentPlace,
         Long totalUsers,
-
         Long departmentId,
         String departmentName,
         Integer departmentPlace,
-
         long organizedEventsCount,
         long participatedEventsCount,
-
         List<RatingTransactionDTO> recentRatingTransactions,
         List<CoinTransactionDTO> recentBalanceTransactions,
         List<OrderShortDTO> recentOrders,

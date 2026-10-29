@@ -139,4 +139,9 @@ public class AchievementService {
                         ua.getEarnedAt()
                 )).toList();
     }
+
+    @Transactional(readOnly = true)
+    public List<Achievement> getAllAchievements() {
+        return achievementRepository.findAll();
+    }
 }

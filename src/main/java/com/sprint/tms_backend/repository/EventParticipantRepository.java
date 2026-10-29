@@ -22,4 +22,6 @@ public interface EventParticipantRepository extends JpaRepository<EventParticipa
 
     // Считает, на сколько событий записался пользователь (для ачивок и профиля)
     long countByUserId(Long userId);
+
+    List<EventParticipant> findByUserId(Long userId);
 }

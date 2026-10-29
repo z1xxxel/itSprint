@@ -2,6 +2,7 @@ package com.sprint.tms_backend.controller;
 
 import com.sprint.tms_backend.DTO.AchievementResponseDTO;
 import com.sprint.tms_backend.DTO.GrantAchievementRequest;
+import com.sprint.tms_backend.model.Achievement;
 import com.sprint.tms_backend.service.AchievementService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -29,5 +30,10 @@ public class AchievementController {
                 request.achievementCode()
         );
         return ResponseEntity.ok("Ачивка успешно выдана");
+    }
+
+    @GetMapping("/all")
+    public ResponseEntity<List<Achievement>> getAllAchievements() {
+        return ResponseEntity.ok(achievementService.getAllAchievements());
     }
 }

@@ -234,6 +234,7 @@ public class UserService {
                 user.getName(),
                 user.getEmail(),
                 user.getRole(),
+                user.getAvatarUrl(),
                 user.getBalance(),
                 currentRating,      // Текущий рейтинг сезона
                 lifetimeRating,     // Общая репутация
@@ -283,15 +284,21 @@ public class UserService {
                 levelDetails.add(new AchievementProfileDTO.LevelDetail(
                         lvl.getLevel(),
                         lvl.getName(),
+                        lvl.getDescription(),
+                        lvl.getRequiredProgress(),
+                        lvl.getRewardCoins() != null ? lvl.getRewardCoins() : BigDecimal.ZERO,
                         isEarned,
                         isEarned ? earned.getEarnedAt() : null
                 ));
             }
 
             Achievement first = levels.get(0);
+            // "Участник I" -> "Участник"
+            String groupName = first.getName().split(" I")[0];
+
             result.add(new AchievementProfileDTO(
                     groupCode,
-                    first.getName().split(" I")[0],
+                    groupName,
                     first.getDescription(),
                     first.getIconUrl(),
                     anyEarned,
@@ -299,5 +306,30 @@ public class UserService {
             ));
         }
         return result;
+    }
+
+    @Transactional(readOnly = true)
+    public List<User> searchUsers(String query) {
+        if (query == null || query.trim().length() < 2) {
+            return List.of();
+        }
+        return userRepository.searchUsers(query.trim());
+    }
+
+    @Transactional
+    public User updateAvatar(Long userId, String avatarUrl, Long actorId) {
+        User actor = userRepository.findById(actorId)
+                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+
+        // Менять можно только себе, если ты не ADMIN
+        if (!actor.getId().equals(userId) && actor.getRole() != UserRole.ADMIN) {
+            throw new SecurityException("Можно менять только свой аватар");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+
+        user.setAvatarUrl(avatarUrl);
+        return userRepository.save(user);
     }
 }

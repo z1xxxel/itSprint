@@ -26,5 +26,7 @@ public enum Permission {
     TICKET_CREATE,
     
     QUEST_MANAGE,    // Создание/удаление квестов (Менеджер, HR, Админ)
-    QUEST_PARTICIPATE
+    QUEST_PARTICIPATE,
+
+    NEWS_MANAGE
 }

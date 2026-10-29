@@ -26,8 +26,30 @@ public class Quest {
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal rewardCoins;
 
+    /** Рейтинговая награда (0-5) */
+    @Column
+    private Double rewardRating;
+
     @Column(nullable = false)
     private Boolean isActive = true;
+
+    @Column
+    private LocalDateTime deadline;
+
+    @Column(nullable = false)
+    private Boolean isMandatory = false;
+
+    @Column(precision = 19, scale = 2)
+    private BigDecimal penaltyCoins;
+
+    @Column
+    private Double penaltyRating;
+
+    @Column(nullable = false)
+    private Boolean isPublic = true;
+
+    @Column(length = 1000)
+    private String audienceDescription;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "creator_id", nullable = false)

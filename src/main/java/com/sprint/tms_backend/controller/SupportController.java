@@ -16,11 +16,13 @@ public class SupportController {
 
     private final SupportService supportService;
 
+    // === Создание ===
     @PostMapping("/tickets")
     public ResponseEntity<SupportTicketDTO> createTicket(@RequestBody CreateTicketRequest request) {
         return new ResponseEntity<>(supportService.createTicket(request), HttpStatus.CREATED);
     }
 
+    // === Списки ===
     @GetMapping("/tickets/my/{userId}")
     public ResponseEntity<List<SupportTicketDTO>> getMyTickets(@PathVariable Long userId) {
         return ResponseEntity.ok(supportService.getMyTickets(userId));
@@ -31,6 +33,12 @@ public class SupportController {
         return ResponseEntity.ok(supportService.getPendingTickets());
     }
 
+    @GetMapping("/tickets/assigned/{supportId}")
+    public ResponseEntity<List<SupportTicketDTO>> getAssignedTickets(@PathVariable Long supportId) {
+        return ResponseEntity.ok(supportService.getAssignedTickets(supportId));
+    }
+
+    // === Действия ===
     @PutMapping("/tickets/{ticketId}/take")
     public ResponseEntity<SupportTicketDTO> takeTicket(
             @PathVariable Long ticketId,
@@ -45,6 +53,7 @@ public class SupportController {
         return ResponseEntity.ok(supportService.completeTicket(ticketId, supportId));
     }
 
+    // === Сообщения ===
     @PostMapping("/tickets/{ticketId}/messages")
     public ResponseEntity<TicketMessageDTO> sendMessage(
             @PathVariable Long ticketId,
@@ -52,6 +61,26 @@ public class SupportController {
         return ResponseEntity.ok(supportService.sendMessage(ticketId, request));
     }
 
+    @PutMapping("/tickets/{ticketId}/messages/{messageId}")
+    public ResponseEntity<TicketMessageDTO> editTicketMessage(
+            @PathVariable Long ticketId,
+            @PathVariable Long messageId,
+            @RequestParam Long userId,
+            @RequestBody EditMessageRequest body) {
+        return ResponseEntity.ok(
+                supportService.editTicketMessage(ticketId, messageId, userId, body.text()));
+    }
+
+    @DeleteMapping("/tickets/{ticketId}/messages/{messageId}")
+    public ResponseEntity<String> deleteTicketMessage(
+            @PathVariable Long ticketId,
+            @PathVariable Long messageId,
+            @RequestParam Long userId) {
+        supportService.deleteTicketMessage(ticketId, messageId, userId);
+        return ResponseEntity.ok("Сообщение удалено");
+    }
+
+    // === Чат тикета ===
     @GetMapping("/tickets/{ticketId}/chat")
     public ResponseEntity<TicketChatResponseDTO> getTicketChat(
             @PathVariable Long ticketId,
@@ -59,6 +88,7 @@ public class SupportController {
         return ResponseEntity.ok(supportService.getTicketChat(ticketId, actorId));
     }
 
+    // === Отзыв ===
     @PostMapping("/tickets/{ticketId}/review")
     public ResponseEntity<SupportTicketDTO> leaveReview(
             @PathVariable Long ticketId,
@@ -66,7 +96,7 @@ public class SupportController {
         return ResponseEntity.ok(supportService.leaveReview(ticketId, request));
     }
 
-    // Support выдает ачивку по тикету
+    // === Выдача ачивки ===
     @PostMapping("/tickets/{ticketId}/grant-achievement")
     public ResponseEntity<String> grantAchievement(
             @PathVariable Long ticketId,

@@ -1,8 +1,4 @@
 target/
+.git/
 .idea/
 *.iml
-.git/
-.gitignore
-README.md
-postman/
-docs/

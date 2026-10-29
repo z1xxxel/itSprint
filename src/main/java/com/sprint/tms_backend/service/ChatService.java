@@ -22,7 +22,9 @@ public class ChatService {
     private final ChatMessageRepository messageRepository;
     private final UserRepository userRepository;
 
+    // ==========================================
     // === Открыть или создать чат ===
+    // ==========================================
     @Transactional
     public ChatSummaryDTO startChat(StartChatRequest request) {
         if (request.myId().equals(request.otherUserId())) {
@@ -34,8 +36,10 @@ public class ChatService {
 
         Chat chat = chatRepository.findByParticipant1IdAndParticipant2Id(smaller, larger)
                 .orElseGet(() -> {
-                    User p1 = userRepository.findById(smaller).orElseThrow(() -> new RuntimeException("Пользователь не найден"));
-                    User p2 = userRepository.findById(larger).orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+                    User p1 = userRepository.findById(smaller)
+                            .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+                    User p2 = userRepository.findById(larger)
+                            .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
                     Chat c = new Chat();
                     c.setParticipant1(p1);
                     c.setParticipant2(p2);
@@ -45,34 +49,39 @@ public class ChatService {
         return toSummary(chat, request.myId());
     }
 
+    // ==========================================
     // === Список моих диалогов ===
+    // ==========================================
     @Transactional(readOnly = true)
     public List<ChatSummaryDTO> getMyChats(Long userId) {
         List<Chat> chats = chatRepository.findAllByUser(userId);
         return chats.stream().map(chat -> toSummary(chat, userId)).toList();
     }
 
-    // === Получить один чат с историей сообщений ===
+    // ==========================================
+    // === Один чат с историей ===
+    // ==========================================
     @Transactional
     public ChatDetailDTO getChat(Long chatId, Long userId) {
         Chat chat = chatRepository.findById(chatId)
                 .orElseThrow(() -> new RuntimeException("Чат не найден"));
 
         checkParticipant(chat, userId);
-
-        // Автоматически отмечаем все входящие как прочитанные
         messageRepository.markAsRead(chatId, userId);
 
         User other = chat.getParticipant1().getId().equals(userId)
                 ? chat.getParticipant2() : chat.getParticipant1();
 
-        List<ChatMessageDTO> messages = messageRepository.findByChatIdOrderByCreatedAtAsc(chatId).stream()
+        List<ChatMessageDTO> messages = messageRepository
+                .findByChatIdOrderByCreatedAtAsc(chatId).stream()
                 .map(this::toMessageDto).toList();
 
         return new ChatDetailDTO(chat.getId(), other.getId(), other.getName(), messages);
     }
 
+    // ==========================================
     // === Отправить сообщение ===
+    // ==========================================
     @Transactional
     public ChatMessageDTO sendMessage(Long chatId, SendChatMessageRequest request) {
         Chat chat = chatRepository.findById(chatId)
@@ -80,7 +89,10 @@ public class ChatService {
 
         checkParticipant(chat, request.senderId());
 
-        if (request.text() == null || request.text().trim().isEmpty()) {
+        boolean hasText = request.text() != null && !request.text().trim().isEmpty();
+        boolean hasAttachment = request.attachmentUrl() != null
+                && !request.attachmentUrl().trim().isEmpty();
+        if (!hasText && !hasAttachment) {
             throw new RuntimeException("Сообщение не может быть пустым");
         }
 
@@ -90,8 +102,9 @@ public class ChatService {
         ChatMessage msg = new ChatMessage();
         msg.setChat(chat);
         msg.setSender(sender);
-        msg.setText(request.text());
+        msg.setText(hasText ? request.text().trim() : "");
         msg.setAttachmentUrl(request.attachmentUrl());
+        msg.setReplyToId(request.replyToId());
         messageRepository.save(msg);
 
         chat.setLastMessageAt(LocalDateTime.now());
@@ -100,23 +113,50 @@ public class ChatService {
         return toMessageDto(msg);
     }
 
-    // === Удалить сообщение (только свое) ===
+    // ==========================================
+    // === Редактировать сообщение ===
+    // ==========================================
+    @Transactional
+    public ChatMessageDTO editMessage(Long chatId, Long messageId, Long userId, String newText) {
+        ChatMessage msg = messageRepository.findById(messageId)
+                .orElseThrow(() -> new RuntimeException("Сообщение не найдено"));
+        if (!msg.getChat().getId().equals(chatId)) {
+            throw new RuntimeException("Сообщение не относится к этому чату");
+        }
+        if (!msg.getSender().getId().equals(userId)) {
+            throw new SecurityException("Можно редактировать только свои сообщения");
+        }
+
+        boolean hasAttachment = msg.getAttachmentUrl() != null && !msg.getAttachmentUrl().trim().isEmpty();
+        if ((newText == null || newText.trim().isEmpty()) && !hasAttachment) {
+            throw new RuntimeException("Текст не может быть пустым");
+        }
+
+        msg.setText(newText == null ? "" : newText.trim());
+        msg.setEditedAt(LocalDateTime.now());
+        messageRepository.save(msg);
+        return toMessageDto(msg);
+    }
+
+    // ==========================================
+    // === Удалить сообщение ===
+    // ==========================================
     @Transactional
     public void deleteMessage(Long chatId, Long messageId, Long userId) {
         ChatMessage msg = messageRepository.findById(messageId)
                 .orElseThrow(() -> new RuntimeException("Сообщение не найдено"));
-
         if (!msg.getChat().getId().equals(chatId)) {
             throw new RuntimeException("Сообщение не относится к этому чату");
         }
         if (!msg.getSender().getId().equals(userId)) {
             throw new SecurityException("Можно удалять только свои сообщения");
         }
-
         messageRepository.delete(msg);
     }
 
-    // === Вспомогательные методы ===
+    // ==========================================
+    // === Вспомогательные ===
+    // ==========================================
     private void checkParticipant(Chat chat, Long userId) {
         if (!chat.getParticipant1().getId().equals(userId)
                 && !chat.getParticipant2().getId().equals(userId)) {
@@ -129,7 +169,8 @@ public class ChatService {
                 ? chat.getParticipant2() : chat.getParticipant1();
 
         ChatMessage lastMsg = messageRepository.findFirstByChatIdOrderByCreatedAtDesc(chat.getId());
-        long unread = messageRepository.countByChatIdAndSenderIdNotAndReadAtIsNull(chat.getId(), currentUserId);
+        long unread = messageRepository.countByChatIdAndSenderIdNotAndReadAtIsNull(
+                chat.getId(), currentUserId);
 
         return new ChatSummaryDTO(
                 chat.getId(),
@@ -148,6 +189,8 @@ public class ChatService {
                 msg.getSender().getName(),
                 msg.getText(),
                 msg.getAttachmentUrl(),
+                msg.getReplyToId(),
+                msg.getEditedAt(),
                 msg.getCreatedAt(),
                 msg.getReadAt()
         );

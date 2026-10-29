@@ -23,7 +23,9 @@ public class SurveyService {
     private final SurveyTemplateRepository templateRepository;
     private final RatingTransactionRepository ratingTxRepository;
 
+    // ==========================================
     // === СОЗДАНИЕ ОПРОСА ===
+    // ==========================================
     @Transactional
     public Survey createSurvey(CreateSurveyRequest request) {
         User creator = userRepository.findById(request.creatorId())
@@ -65,10 +67,15 @@ public class SurveyService {
         }
         survey.setQuestions(questions);
 
-        return surveyRepository.save(survey);
+        Survey saved = surveyRepository.save(survey);
+        // Форсим инициализацию lazy-коллекций, чтобы Jackson не упал при сериализации
+        initSurveyCollections(List.of(saved));
+        return saved;
     }
 
+    // ==========================================
     // === ПРОХОЖДЕНИЕ ОПРОСА ===
+    // ==========================================
     @Transactional
     public void submitSurvey(Long surveyId, SubmitSurveyRequest request) {
         Survey survey = surveyRepository.findById(surveyId)
@@ -114,7 +121,9 @@ public class SurveyService {
         }
     }
 
-    // === АВТОМАТИЧЕСКОЕ ЗАКРЫТИЕ И ШТРАФЫ (Вызывается планировщиком) ===
+    // ==========================================
+    // === АВТОМАТИЧЕСКОЕ ЗАКРЫТИЕ И ШТРАФЫ ===
+    // ==========================================
     @Transactional
     public void applyPenaltiesForExpiredSurveys() {
         List<Survey> expiredSurveys = surveyRepository.findByIsActiveTrueAndDeadlineBefore(LocalDateTime.now());
@@ -149,10 +158,21 @@ public class SurveyService {
         }
     }
 
-    // === ПРОСМОТР РЕЗУЛЬТАТОВ (ВОССТАНОВЛЕНО) ===
+    // ==========================================
+    // === ПРОСМОТР ===
+    // ==========================================
     @Transactional(readOnly = true)
     public List<Survey> getAllSurveys() {
-        return surveyRepository.findAll();
+        List<Survey> surveys = surveyRepository.findAll();
+        initSurveyCollections(surveys);
+        return surveys;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Survey> getSurveysByStatus(Boolean isActive) {
+        List<Survey> surveys = surveyRepository.findByIsActive(isActive);
+        initSurveyCollections(surveys);
+        return surveys;
     }
 
     @Transactional(readOnly = true)
@@ -160,12 +180,9 @@ public class SurveyService {
         return responseRepository.findBySurveyId(surveyId);
     }
 
-    @Transactional(readOnly = true)
-    public List<Survey> getSurveysByStatus(Boolean isActive) {
-        return surveyRepository.findByIsActive(isActive);
-    }
-
-    // === УДАЛЕНИЕ ОПРОСА ===
+    // ==========================================
+    // === УДАЛЕНИЕ ===
+    // ==========================================
     @Transactional
     public void deleteSurvey(Long surveyId, Long actorId) {
         User actor = userRepository.findById(actorId)
@@ -182,7 +199,9 @@ public class SurveyService {
         surveyRepository.delete(survey);
     }
 
+    // ==========================================
     // === СВОДНАЯ СТАТИСТИКА ===
+    // ==========================================
     @Transactional(readOnly = true)
     public SurveyStatsResponseDTO getSurveyStats(Long surveyId, Long actorId) {
         User actor = userRepository.findById(actorId).orElseThrow();
@@ -210,7 +229,9 @@ public class SurveyService {
         return new SurveyStatsResponseDTO(survey.getId(), survey.getTitle(), survey.getDeadline(), survey.getIsActive(), totalUsers, respondedUsers, Math.round(responseRate * 10.0) / 10.0, questionStats);
     }
 
-    // === ДЕТАЛЬНЫЕ ОТВЕТЫ ПОЛЬЗОВАТЕЛЕЙ ===
+    // ==========================================
+    // === ДЕТАЛЬНЫЕ ОТВЕТЫ ===
+    // ==========================================
     @Transactional(readOnly = true)
     public List<SurveyUserResponseDTO> getDetailedResponses(Long surveyId, Long actorId) {
         User actor = userRepository.findById(actorId).orElseThrow();
@@ -228,7 +249,9 @@ public class SurveyService {
         return result;
     }
 
+    // ==========================================
     // === СОХРАНЕНИЕ КАК ШАБЛОН ===
+    // ==========================================
     @Transactional
     public SurveyTemplate saveAsTemplate(Long surveyId, Long actorId, String templateName) {
         User actor = userRepository.findById(actorId).orElseThrow();
@@ -255,5 +278,28 @@ public class SurveyService {
         }
         template.setQuestions(templateQuestions);
         return templateRepository.save(template);
+    }
+
+    // ==========================================
+    // === HELPER: force-init lazy-коллекций ===
+    // ==========================================
+    /**
+     * Принудительно инициализирует lazy-коллекции Survey внутри транзакции.
+     * Нужно, потому что spring.jpa.open-in-view=false — иначе Jackson при
+     * сериализации в контроллере упадёт на LazyInitializationException.
+     */
+    private void initSurveyCollections(List<Survey> surveys) {
+        for (Survey s : surveys) {
+            if (s.getCreator() != null) {
+                s.getCreator().getName();
+            }
+            if (s.getQuestions() != null) {
+                for (SurveyQuestion q : s.getQuestions()) {
+                    if (q.getOptions() != null) {
+                        q.getOptions().size();
+                    }
+                }
+            }
+        }
     }
 }

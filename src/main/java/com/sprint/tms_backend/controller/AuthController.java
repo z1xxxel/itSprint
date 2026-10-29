@@ -20,7 +20,6 @@ public class AuthController {
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
         User user = userService.login(request.email(), request.password());
 
-        // Возвращаем данные пользователя без пароля
         return ResponseEntity.ok(Map.of(
                 "message", "Успешный вход",
                 "userId", user.getId(),

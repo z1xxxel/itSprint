@@ -22,7 +22,6 @@ public class AdminController {
         return ResponseEntity.ok(adminService.getDashboard(actorId));
     }
 
-    // --- Настройки ---
     @GetMapping("/settings")
     public ResponseEntity<List<SystemSetting>> getSettings(@RequestParam Long actorId) {
         return ResponseEntity.ok(adminService.getSettings(actorId));
@@ -33,13 +32,11 @@ public class AdminController {
         return ResponseEntity.ok(adminService.updateSetting(key, value, actorId));
     }
 
-    // --- Тикеты ---
     @GetMapping("/tickets")
     public ResponseEntity<List<SupportTicketDTO>> getAllTickets(@RequestParam Long actorId) {
         return ResponseEntity.ok(adminService.getAllTickets(actorId));
     }
 
-    // --- Квесты ---
     @GetMapping("/quests")
     public ResponseEntity<List<AdminQuestDTO>> getAllQuests(@RequestParam Long actorId) {
         return ResponseEntity.ok(adminService.getAllQuests(actorId));
@@ -62,7 +59,6 @@ public class AdminController {
         return ResponseEntity.ok("Квест отклонен");
     }
 
-    // ОТМЕНА УЖЕ ЗАВЕРШЕННОГО КВЕСТА
     @PutMapping("/quests/{id}/cancel-completed")
     public ResponseEntity<String> cancelCompletedQuest(
             @PathVariable Long id,
@@ -72,7 +68,6 @@ public class AdminController {
         return ResponseEntity.ok("Выполненный квест отменен, средства возвращены в казну");
     }
 
-    // --- Транзакции и Штрафы ---
     @GetMapping("/transactions")
     public ResponseEntity<Page<CoinTransactionDTO>> getAllTransactions(
             @RequestParam Long actorId, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "50") int size) {
@@ -86,7 +81,6 @@ public class AdminController {
         return ResponseEntity.ok("Транзакция отменена");
     }
 
-    // НАЛОЖЕНИЕ ШТРАФА
     @PostMapping("/penalties")
     public ResponseEntity<String> applyPenalty(@RequestBody PenaltyRequest request) {
         adminService.applyPenalty(request);

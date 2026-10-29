@@ -2,6 +2,7 @@ package com.sprint.tms_backend.controller;
 
 import com.sprint.tms_backend.DTO.ThanksFeedResponseDTO;
 import com.sprint.tms_backend.DTO.ThanksStatsDTO;
+import com.sprint.tms_backend.DTO.TopThankedDTO;
 import com.sprint.tms_backend.DTO.UserThanksDTO;
 import com.sprint.tms_backend.service.ThanksService;
 import lombok.RequiredArgsConstructor;
@@ -37,5 +38,10 @@ public class ThanksController {
     @GetMapping("/user/{userId}/stats")
     public ResponseEntity<ThanksStatsDTO> getStats(@PathVariable Long userId) {
         return ResponseEntity.ok(thanksService.getStats(userId));
+    }
+
+    @GetMapping("/top-week")
+    public ResponseEntity<List<TopThankedDTO>> getTopWeek(@RequestParam(defaultValue = "3") int limit) {
+        return ResponseEntity.ok(thanksService.getTopWeek(limit));
     }
 }

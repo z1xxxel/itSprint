@@ -36,6 +36,12 @@ public class ChatMessage {
     @Column(length = 500)
     private String attachmentUrl;
 
+    /** ID сообщения, на которое это является ответом */
+    private Long replyToId;
+
+    /** Дата редактирования (null = не редактировалось) */
+    private LocalDateTime editedAt;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 

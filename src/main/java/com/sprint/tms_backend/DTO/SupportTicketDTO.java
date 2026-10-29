@@ -13,6 +13,7 @@ public record SupportTicketDTO(
         Long assigneeId,
         String assigneeName,
         TicketStatus status,
+        Boolean isQuestRequest,
         LocalDateTime createdAt,
         LocalDateTime closedAt,
         Integer rating,

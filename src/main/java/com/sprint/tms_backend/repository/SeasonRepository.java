@@ -10,7 +10,8 @@ import java.util.Optional;
 
 @Repository
 public interface SeasonRepository extends JpaRepository<Season, Long> {
-    Optional<Season> findByIsActiveTrue();
+    // Берем самый поздний активный сезон (на случай дублей)
+    Optional<Season> findFirstByIsActiveTrueOrderByEndDateDesc();
 
     // Для планировщика: ищем активные сезоны с истекшим сроком
     List<Season> findByIsActiveTrueAndEndDateBefore(LocalDateTime now);

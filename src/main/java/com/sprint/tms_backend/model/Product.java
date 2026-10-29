@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Entity
 @Table(name = "products")
@@ -20,14 +21,8 @@ public class Product {
     @Column(length = 1000)
     private String description;
 
-    // БАЗОВАЯ цена (то, что задает админ). Без скидок и наценок.
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal price;
-
-    // Постоянная наценка/уценка в процентах. Может быть отрицательной.
-    // Например: -10 (уценка 10%), 0 (без изменений), +15 (наценка 15%)
-    @Column(nullable = false)
-    private Integer priceAdjustmentPercent = 0;
 
     @Column(nullable = false)
     private Integer stock;
@@ -44,4 +39,10 @@ public class Product {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private ProductType type = ProductType.PHYSICAL;
+
+    @Column(nullable = false)
+    private Boolean hasVariants = false;
+
+    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<ProductVariant> variants;
 }

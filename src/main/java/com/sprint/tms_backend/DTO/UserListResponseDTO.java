@@ -8,9 +8,11 @@ public record UserListResponseDTO(
         String name,
         String email,
         UserRole role,
-        Double currentRating,   // Текущий рейтинг сезона
-        Double lifetimeRating,  // Общая репутация
-        String level,           // Уровень
+        Double currentRating,
+        Double lifetimeRating,
+        String level,
         BigDecimal balance,
-        Boolean isBlocked
+        Boolean isBlocked,
+        Long departmentId,
+        String departmentName
 ) {}

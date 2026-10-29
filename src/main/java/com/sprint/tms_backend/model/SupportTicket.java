@@ -53,4 +53,8 @@ public class SupportTicket {
     @OneToMany(mappedBy = "ticket", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnore
     private List<TicketMessage> messages;
+
+    // в класс SupportTicket, рядом с description:
+    @Column(nullable = false)
+    private Boolean isQuestRequest = false;
 }

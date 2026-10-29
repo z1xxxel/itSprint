@@ -16,19 +16,16 @@ public class ChatController {
 
     private final ChatService chatService;
 
-    // Открыть диалог с пользователем (создаст, если не существует)
     @PostMapping("/start")
     public ResponseEntity<ChatSummaryDTO> startChat(@RequestBody StartChatRequest request) {
         return new ResponseEntity<>(chatService.startChat(request), HttpStatus.OK);
     }
 
-    // Список моих диалогов
     @GetMapping("/my")
     public ResponseEntity<List<ChatSummaryDTO>> getMyChats(@RequestParam Long userId) {
         return ResponseEntity.ok(chatService.getMyChats(userId));
     }
 
-    // Открыть чат (заодно пометит сообщения прочитанными)
     @GetMapping("/{chatId}")
     public ResponseEntity<ChatDetailDTO> getChat(
             @PathVariable Long chatId,
@@ -36,7 +33,6 @@ public class ChatController {
         return ResponseEntity.ok(chatService.getChat(chatId, userId));
     }
 
-    // Отправить сообщение
     @PostMapping("/{chatId}/messages")
     public ResponseEntity<ChatMessageDTO> sendMessage(
             @PathVariable Long chatId,
@@ -44,7 +40,16 @@ public class ChatController {
         return ResponseEntity.ok(chatService.sendMessage(chatId, request));
     }
 
-    // Удалить сообщение
+    @PutMapping("/{chatId}/messages/{messageId}")
+    public ResponseEntity<ChatMessageDTO> editMessage(
+            @PathVariable Long chatId,
+            @PathVariable Long messageId,
+            @RequestParam Long userId,
+            @RequestBody EditMessageRequest body) {
+        return ResponseEntity.ok(
+                chatService.editMessage(chatId, messageId, userId, body.text()));
+    }
+
     @DeleteMapping("/{chatId}/messages/{messageId}")
     public ResponseEntity<String> deleteMessage(
             @PathVariable Long chatId,

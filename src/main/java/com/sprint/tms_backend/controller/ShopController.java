@@ -41,11 +41,10 @@ public class ShopController {
 
     // === Товары ===
     @PostMapping("/products")
-    public ResponseEntity<Product> createProduct(
+    public ResponseEntity<ProductResponseDTO> createProduct(
             @RequestParam Long actorId,
             @RequestBody CreateProductRequest request) {
-        Product product = shopService.createProduct(actorId, request);
-        return new ResponseEntity<>(product, HttpStatus.CREATED);
+        return new ResponseEntity<>(shopService.createProduct(actorId, request), HttpStatus.CREATED);
     }
 
     @GetMapping("/products")
@@ -136,7 +135,7 @@ public class ShopController {
     }
 
     @PutMapping("/products/{id}")
-    public ResponseEntity<Product> updateProduct(
+    public ResponseEntity<ProductResponseDTO> updateProduct(
             @PathVariable Long id,
             @RequestParam Long actorId,
             @RequestBody CreateProductRequest request) {
@@ -177,5 +176,60 @@ public class ShopController {
             @RequestBody WriteOffStockRequest request) {
         shopService.writeOffStock(productId, actorId, request);
         return ResponseEntity.ok("Списание успешно выполнено");
+    }
+
+    @PostMapping("/purchase-bulk")
+    public ResponseEntity<List<OrderResponseDTO>> purchaseBulk(@RequestBody List<PurchaseRequest> requests) {
+        return new ResponseEntity<>(shopService.purchaseBulk(requests), HttpStatus.CREATED);
+    }
+
+    @PostMapping("/products/{id}/restock")
+    public ResponseEntity<String> restockProduct(
+            @PathVariable Long id,
+            @RequestParam Long actorId,
+            @RequestBody RestockRequest request) {
+        shopService.restockProduct(id, actorId, request.amount(), request.variantId());
+        return ResponseEntity.ok("Остаток пополнен");
+    }
+
+    @PutMapping("/categories/{id}")
+    public ResponseEntity<Category> updateCategory(
+            @PathVariable Long id,
+            @RequestParam Long actorId,
+            @RequestBody CreateCategoryRequest request) {
+        return ResponseEntity.ok(shopService.updateCategory(id, actorId, request));
+    }
+
+    @DeleteMapping("/categories/{id}")
+    public ResponseEntity<String> deleteCategory(
+            @PathVariable Long id,
+            @RequestParam Long actorId) {
+        shopService.deleteCategory(id, actorId);
+        return ResponseEntity.ok("Категория удалена");
+    }
+
+    @GetMapping("/products/{id}")
+    public ResponseEntity<ProductResponseDTO> getProduct(@PathVariable Long id) {
+        return ResponseEntity.ok(shopService.getProductById(id));
+    }
+
+    @GetMapping("/products/{id}/movements")
+    public ResponseEntity<List<ProductMovementDTO>> getProductMovements(
+            @PathVariable Long id,
+            @RequestParam Long actorId) {
+        return ResponseEntity.ok(shopService.getProductMovements(id, actorId));
+    }
+
+    @GetMapping("/orders/all")
+    public ResponseEntity<List<OrderResponseDTO>> getAllOrders(@RequestParam Long actorId) {
+        return ResponseEntity.ok(shopService.getAllOrders(actorId));
+    }
+
+    @DeleteMapping("/products/{id}/discount")
+    public ResponseEntity<String> deleteDiscount(
+            @PathVariable Long id,
+            @RequestParam Long actorId) {
+        shopService.deleteDiscount(id, actorId);
+        return ResponseEntity.ok("Скидка удалена");
     }
 }

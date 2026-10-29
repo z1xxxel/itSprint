@@ -17,7 +17,7 @@ public class TicketMessage {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "ticket_id", nullable = false)
-    @com.fasterxml.jackson.annotation.JsonIgnore // Защита от рекурсии
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private SupportTicket ticket;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -29,6 +29,9 @@ public class TicketMessage {
 
     @Column(length = 500)
     private String attachmentUrl;
+
+    private Long replyToId;
+    private LocalDateTime editedAt;
 
     @CreationTimestamp
     private LocalDateTime createdAt;

@@ -8,7 +8,8 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "shop_audit_logs", indexes = {
-        @Index(name = "idx_audit_created", columnList = "createdAt")
+        @Index(name = "idx_audit_created", columnList = "createdAt"),
+        @Index(name = "idx_audit_product", columnList = "productId")
 })
 @Data
 public class ShopAuditLog {
@@ -17,8 +18,6 @@ public class ShopAuditLog {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // PRODUCT_CREATED, PRODUCT_UPDATED, PRODUCT_DELETED, DISCOUNT_CREATED,
-    // ORDER_APPROVED, ORDER_REJECTED, ORDER_COMPLETED, STOCK_WRITTEN_OFF
     @Column(nullable = false, length = 50)
     private String action;
 
@@ -35,6 +34,10 @@ public class ShopAuditLog {
 
     @Column(length = 1000)
     private String details;
+
+    /** Изменение количества: +10 / -3 / null (если это не движение товара) */
+    @Column
+    private Integer quantityDelta;
 
     @CreationTimestamp
     private LocalDateTime createdAt;

@@ -9,4 +9,5 @@ import java.util.List;
 @Repository
 public interface QuestRepository extends JpaRepository<Quest, Long> {
     List<Quest> findByIsActiveTrue();
+    List<Quest> findByIsActiveTrueOrderByCreatedAtDesc();
 }

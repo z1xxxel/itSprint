@@ -24,6 +24,10 @@ public class Order {
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "variant_id")
+    private ProductVariant variant;
+
     @Column(nullable = false)
     private Integer quantity;
 
@@ -38,5 +42,5 @@ public class Order {
     private OrderStatus status = OrderStatus.PENDING;
 
     @Column(length = 500)
-    private String adminComment; // Причина отклонения или комментарий менеджера
+    private String adminComment;
 }

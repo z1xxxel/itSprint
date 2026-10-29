@@ -1,8 +1,9 @@
 package com.sprint.tms_backend.controller;
 
-import com.sprint.tms_backend.DTO.AssignEventRequest;
+import com.sprint.tms_backend.DTO.ApproveEventRequest;
 import com.sprint.tms_backend.DTO.CreateEventRequestDTO;
 import com.sprint.tms_backend.DTO.EventResponseDTO;
+import com.sprint.tms_backend.DTO.RollbackRequest;
 import com.sprint.tms_backend.service.EventService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -19,32 +20,28 @@ public class EventController {
     private final EventService eventService;
 
     @PostMapping
-    public ResponseEntity<EventResponseDTO> createEvent(@RequestBody CreateEventRequestDTO request) {
-        EventResponseDTO createdEvent = eventService.createEvent(
-                request.organizerId(),
-                request.fromTime(),
-                request.toTime(),
-                request.category(),
-                request.nameEvent(),
-                request.description(),
-                request.eventPlace(),
-                request.commentToAdmin(),
-                request.paidInCoins(),
-                request.rewardCoins(),
-                request.rewardRating()
-        );
-        return new ResponseEntity<>(createdEvent, HttpStatus.CREATED);
+    public ResponseEntity<EventResponseDTO> createEvent(
+            @RequestBody CreateEventRequestDTO req) {
+        return new ResponseEntity<>(eventService.createEvent(req), HttpStatus.CREATED);
+    }
+
+    @PutMapping("/{id}/assign")
+    public ResponseEntity<EventResponseDTO> assignEvent(
+            @PathVariable Long id,
+            @RequestBody ApproveEventRequest req) {
+        return ResponseEntity.ok(eventService.assignEvent(id, req));
+    }
+
+    @PutMapping("/{id}/rollback-rewards")
+    public ResponseEntity<EventResponseDTO> rollbackRewards(
+            @PathVariable Long id,
+            @RequestBody RollbackRequest req) {
+        return ResponseEntity.ok(eventService.rollbackRewards(id, req.actorId(), req.reason()));
     }
 
     @PutMapping("/{id}/cancel")
     public ResponseEntity<EventResponseDTO> cancelEvent(@PathVariable Long id) {
         return ResponseEntity.ok(eventService.cancelEvent(id));
-    }
-
-    @PutMapping("/{id}/assign")
-    public ResponseEntity<EventResponseDTO> assignEvent(@PathVariable Long id,
-                                                        @RequestBody AssignEventRequest request) {
-        return ResponseEntity.ok(eventService.assignEvent(id, request.actorId()));
     }
 
     @GetMapping
@@ -58,5 +55,10 @@ public class EventController {
             @PathVariable Long organizerId,
             @RequestParam(required = false) Long actorId) {
         return ResponseEntity.ok(eventService.getEventsByUser(organizerId, actorId));
+    }
+
+    @GetMapping("/my-participations")
+    public ResponseEntity<List<Long>> getMyParticipations(@RequestParam Long userId) {
+        return ResponseEntity.ok(eventService.getParticipatingEventIds(userId));
     }
 }

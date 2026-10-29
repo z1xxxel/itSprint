@@ -2,6 +2,7 @@ package com.sprint.tms_backend.service;
 
 import com.sprint.tms_backend.DTO.ThanksFeedResponseDTO;
 import com.sprint.tms_backend.DTO.ThanksStatsDTO;
+import com.sprint.tms_backend.DTO.TopThankedDTO;
 import com.sprint.tms_backend.DTO.UserThanksDTO;
 import com.sprint.tms_backend.model.CoinTransaction;
 import com.sprint.tms_backend.model.CoinTransactionType;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -125,5 +127,44 @@ public class ThanksService {
                 .toList();
 
         return new ThanksStatsDTO(received, sent, sumRecv, sumSent, top);
+    }
+
+    @Transactional(readOnly = true)
+    public List<TopThankedDTO> getTopWeek(int limit) {
+        LocalDateTime weekAgo = LocalDateTime.now().minusDays(7);
+
+        List<CoinTransaction> txs = coinTxRepository.findAllByOrderByCreatedAtDesc(
+                        PageRequest.of(0, 500)).getContent().stream()
+                .filter(t -> t.getType() == CoinTransactionType.PEER_THANKS)
+                .filter(t -> t.getCreatedAt().isAfter(weekAgo))
+                .filter(t -> t.getToUserId() != null)
+                .toList();
+
+        Map<Long, Long> counts = txs.stream()
+                .collect(Collectors.groupingBy(
+                        CoinTransaction::getToUserId,
+                        Collectors.counting()
+                ));
+
+        List<Long> topIds = counts.entrySet().stream()
+                .sorted(Map.Entry.<Long, Long>comparingByValue().reversed())
+                .limit(limit)
+                .map(Map.Entry::getKey)
+                .toList();
+
+        Map<Long, User> users = userRepository.findAllById(topIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
+
+        return topIds.stream()
+                .map(id -> {
+                    User u = users.get(id);
+                    return new TopThankedDTO(
+                            id,
+                            u != null ? u.getName() : "—",
+                            u != null ? u.getAvatarUrl() : null,
+                            counts.get(id)
+                    );
+                })
+                .toList();
     }
 }

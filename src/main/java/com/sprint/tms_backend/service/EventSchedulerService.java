@@ -77,4 +77,18 @@ public class EventSchedulerService {
             log.info("Казна автоматически пополнена на сумму по умолчанию: {}", defaultBudget);
         }
     }
+
+    private final NewsService newsService;
+    // Раз в 15 минут проверяем новости с истёкшим сроком и уводим в архив
+    @Scheduled(fixedRate = 900_000)
+    public void autoArchiveExpiredNews() {
+        try {
+            int archived = newsService.autoArchiveExpired();
+            if (archived > 0) {
+                log.info("Автоархив: {} новостей отправлено в архив", archived);
+            }
+        } catch (Exception e) {
+            log.error("Ошибка при автоархивации новостей", e);
+        }
+    }
 }

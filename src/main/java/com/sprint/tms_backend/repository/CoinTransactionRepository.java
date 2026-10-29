@@ -84,4 +84,11 @@ public interface CoinTransactionRepository extends JpaRepository<CoinTransaction
             "AND (t.fromUserId = :userId OR t.toUserId = :userId) " +
             "ORDER BY t.createdAt DESC")
     Page<CoinTransaction> findAllThanksByUser(@Param("userId") Long userId, Pageable pageable);
+
+    @Query("SELECT t FROM CoinTransaction t " +
+            "WHERE (t.fromUserId = :userId OR t.toUserId = :userId) " +
+            "AND t.createdAt >= :since ORDER BY t.createdAt ASC")
+    List<CoinTransaction> findAllHistorySince(
+            @Param("userId") Long userId,
+            @Param("since") LocalDateTime since);
 }

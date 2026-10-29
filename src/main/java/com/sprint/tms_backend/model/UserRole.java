@@ -29,14 +29,18 @@ public enum UserRole {
             Permission.COIN_GRANT_SUBORDINATE,
             Permission.CATALOG_VIEW,
             Permission.CATALOG_MANAGE,
-            Permission.ORDER_MANAGE  // Управление заказами (подтверждение/отклонение)
+            Permission.ORDER_MANAGE,
+            Permission.QUEST_MANAGE,
+            Permission.QUEST_PARTICIPATE
     )),
 
     SUPPORT(EnumSet.of(
             Permission.TICKET_MANAGE,
             Permission.TICKET_CREATE,
             Permission.COIN_TRANSFER,
-            Permission.CATALOG_VIEW
+            Permission.CATALOG_VIEW,
+            Permission.QUEST_MANAGE,
+            Permission.QUEST_PARTICIPATE
     )),
 
     HR(EnumSet.of(
@@ -45,8 +49,13 @@ public enum UserRole {
             Permission.EVENT_VIEW_ANY,
             Permission.COIN_TRANSFER,
             Permission.USER_MANAGE,
+            Permission.ORDER_MANAGE,
+            Permission.CATALOG_MANAGE,
             Permission.CATALOG_VIEW,
-            Permission.ORDER_MANAGE
+            Permission.QUEST_MANAGE,
+            Permission.QUEST_PARTICIPATE,
+            Permission.TICKET_CREATE,
+            Permission.NEWS_MANAGE
     )),
 
     ADMIN(EnumSet.allOf(Permission.class));

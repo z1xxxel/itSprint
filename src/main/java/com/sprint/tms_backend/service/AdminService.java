@@ -74,11 +74,19 @@ public class AdminService {
     public List<SupportTicketDTO> getAllTickets(Long actorId) {
         checkAdminRights(actorId);
         return ticketRepository.findAll().stream().map(t -> new SupportTicketDTO(
-                t.getId(), t.getTopic(), t.getDescription(),
-                t.getCreator().getId(), t.getCreator().getName(),
+                t.getId(),
+                t.getTopic(),
+                t.getDescription(),
+                t.getCreator().getId(),
+                t.getCreator().getName(),
                 t.getAssignee() != null ? t.getAssignee().getId() : null,
                 t.getAssignee() != null ? t.getAssignee().getName() : null,
-                t.getStatus(), t.getCreatedAt(), t.getClosedAt(), t.getRating(), t.getReviewComment()
+                t.getStatus(),
+                Boolean.TRUE.equals(t.getIsQuestRequest()),   // <-- добавлено
+                t.getCreatedAt(),
+                t.getClosedAt(),
+                t.getRating(),
+                t.getReviewComment()
         )).toList();
     }
 

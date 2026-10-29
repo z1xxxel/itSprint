@@ -35,7 +35,7 @@ public class FileController {
             Files.copy(file.getInputStream(), filePath);
 
             // 4. Возвращаем URL (его потом вставим в товар)
-            String fileUrl = "http://localhost:8080/uploads/" + newFileName;
+            String fileUrl = "/uploads/" + newFileName;
             return ResponseEntity.ok(fileUrl);
 
         } catch (IOException e) {
